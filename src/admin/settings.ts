@@ -27,6 +27,8 @@ export interface TenantSettings {
     externalMcpClients: boolean;
     /** Highest tier external MCP clients may request (they can never decide approvals). */
     externalClientMaxTier: 0 | 1 | 2 | 3;
+    /** Hosts an external MCP client may receive an authorization code at (loopback is always allowed). */
+    externalClientRedirectHosts: string[];
   };
   documents: {
     store: "box" | "local";
@@ -93,7 +95,7 @@ export function defaultSettings(tenantId: string): TenantSettings {
     firmName: "Firm",
     timezone: "Australia/Perth",
     identity: { providers: ["google"], allowedDomains: [], requireMfaClaim: false },
-    ai: { enabled: true, provider: "anthropic", model: process.env.PRACTY_AI_MODEL ?? "", externalMcpClients: false, externalClientMaxTier: 1 },
+    ai: { enabled: true, provider: "anthropic", model: process.env.PRACTY_AI_MODEL ?? "", externalMcpClients: false, externalClientMaxTier: 1, externalClientRedirectHosts: ["claude.ai", "claude.com"] },
     documents: { store: "local", schemeLabels: { icwa_mva: "MVA", workcover_wa: "WC", other: "PI" }, emailsSubfolder: "Emails", generatedSubfolder: "Drafts" },
     mail: { provider: "none", filingMode: "off", refileLabelPrefix: "Box Filed/Refile/", autoFile: true, autoFileCap: 60 },
     calendar: { provider: "none", calendarId: "primary" },

@@ -4,7 +4,7 @@ import { settingsFor } from "../admin/settings.js";
 import { NameConflictError, type DocumentStore, type FileRef, type MailMessage } from "../connectors/types.js";
 import { conflict, invalid, notFound } from "../core/errors.js";
 import { defineCommand } from "../core/registry.js";
-import type { Actor, InvocationContext } from "../core/types.js";
+import { AI_SURFACES, type Actor, type InvocationContext } from "../core/types.js";
 import { matterGuard, visibleMatters } from "../domain/commands.js";
 import type { Matter } from "../domain/model.js";
 import type { Store } from "../domain/store.js";
@@ -204,11 +204,17 @@ export class FilingService {
       const stored = await this.uploadOnce(docs, folder, f.name, f.bytes, f.type, time);
       if (stored.duplicate) duplicates++;
       if (f.kind === "eml") continue;
+      // Re-filing must not launder an AI exclusion: a copy of excluded content stays excluded.
+      const excluded = documentsOf(this.store).list(
+        actor.tenantId,
+        (d) => !!d.aiExcluded && ((!!stored.file.sha1 && d.sha1 === stored.file.sha1) || (d.emailMessageId === item.messageId && d.name === stored.file.name)),
+      )[0];
       const doc: MatterDocument = documentsOf(this.store).set({
         id: randomUUID(), tenantId: actor.tenantId, matterId, store: docs.kind, storeFileId: stored.file.id, folderId: folder,
         name: stored.file.name, contentType: f.type, size: f.bytes.length, sha1: stored.file.sha1, docDate: message.date.slice(0, 10),
         docType: f.kind === "email" ? "Email" : undefined, category: "Correspondence", source: "email", emailMessageId: item.messageId,
         createdAt: new Date().toISOString(), createdBy: actor.userId,
+        ...(excluded ? { aiExcluded: true, aiExcludedReason: excluded.aiExcludedReason, derivedFrom: [excluded.id] } : {}),
       });
       documentIds.push(doc.id);
     }
@@ -289,6 +295,13 @@ export function filingCommands(svc: FilingService) {
     if (!item || item.userId !== userId) throw notFound("Email");
     return item;
   };
+  /** An item of the caller's that is tied to a matter hidden on this surface does not exist for them. */
+  const ownVisible = (ctx: InvocationContext, id: string) => {
+    const item = own(ctx.actor.tenantId, ctx.actor.userId, id);
+    if (!forSurface(ctx, [item]).length) throw notFound("Email");
+    return item;
+  };
+  const shown = (ctx: InvocationContext, item: MailItem) => forSurface(ctx, [item])[0] ?? { ...item, matterId: undefined, candidates: [], evidence: [] };
   const STAFF = ["principal", "solicitor", "paralegal", "accounts"] as const;
   return [
     defineCommand({
@@ -320,9 +333,10 @@ export function filingCommands(svc: FilingService) {
       input: z.object({ itemId: z.string(), matterId: z.string() }),
       matterIds: (i) => [i.matterId],
       handler: async ({ itemId, matterId }, ctx) => {
-        const item = own(ctx.actor.tenantId, ctx.actor.userId, itemId);
+        const item = ownVisible(ctx, itemId);
         if (item.status === "filed" && item.matterId === matterId) throw invalid("Already filed to this matter");
-        return svc.file(ctx.actor, item, matterId);
+        // Filed by an AI client: the sender is not vouched for by a person, so it does not join send_email's recipients.
+        return shown(ctx, await svc.file(ctx.actor, item, matterId, undefined, AI_SURFACES.includes(ctx.surface)));
       },
     }),
     defineCommand({
@@ -376,7 +390,7 @@ export function filingCommands(svc: FilingService) {
       description: "Mark an email in the review queue as not belonging to any matter.",
       tier: 1,
       input: z.object({ itemId: z.string() }),
-      handler: ({ itemId }, ctx) => svc.items.set({ ...own(ctx.actor.tenantId, ctx.actor.userId, itemId), status: "dismissed" }),
+      handler: ({ itemId }, ctx) => shown(ctx, svc.items.set({ ...ownVisible(ctx, itemId), status: "dismissed" })),
     }),
   ];
 }

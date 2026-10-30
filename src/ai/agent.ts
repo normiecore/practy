@@ -171,6 +171,8 @@ export class AgentService {
     const ids = [
       ...(parsed?.success ? (def!.matterIds?.(parsed.data) ?? []) : []),
       ...(out.status === "executed" ? (def?.resultMatterIds?.(out.result) ?? []) : []),
+      // Lists (search, digest, approvals, conflicts) span many matters without declaring them.
+      ...(out.status === "executed" ? matterRefs(out.result).filter((id) => this.store.matters.find(c.tenantId, id)) : []),
     ];
     if (ids.length) c.matterIds = [...new Set([...(c.matterIds ?? []), ...ids])];
   }
@@ -179,6 +181,19 @@ export class AgentService {
     c.updatedAt = new Date().toISOString();
     this.conversations.set(c);
   }
+}
+
+/** Every matter id a result mentions: matterId/matterIds fields, and records shaped like a matter. */
+export function matterRefs(value: unknown, out: string[] = []): string[] {
+  if (Array.isArray(value)) value.forEach((v) => matterRefs(v, out));
+  else if (value && typeof value === "object") {
+    const o = value as Record<string, unknown>;
+    if (typeof o.matterId === "string") out.push(o.matterId);
+    if (Array.isArray(o.matterIds)) out.push(...o.matterIds.filter((x): x is string => typeof x === "string"));
+    if (typeof o.id === "string" && typeof o.number === "string" && typeof o.scheme === "string") out.push(o.id);
+    Object.values(o).forEach((v) => matterRefs(v, out));
+  }
+  return out;
 }
 
 export interface TranscriptItem {

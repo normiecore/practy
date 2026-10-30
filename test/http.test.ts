@@ -171,4 +171,32 @@ describe("MCP OAuth for external AI clients", () => {
     expect(knownPage).toContain("<strong>claude.ai</strong>");
     expect(knownPage).not.toContain("Unverified client");
   });
+
+  it("issues no code to a redirect host the firm has not allowed, even if Allow is posted", async () => {
+    const { base, app } = await start();
+    const settings = app.store.collection<TenantSettings>("tenant_settings");
+    const current = settingsFor(app.store, TENANT);
+    settings.set({ ...current, ai: { ...current.ai, externalMcpClients: true } });
+    const reg = await (await fetch(`${base}/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ client_name: "Claude", redirect_uris: ["https://attacker.example/cb"], token_endpoint_auth_method: "none" }) })).json();
+    const challenge = createHash("sha256").update("v").digest("base64url");
+    const cookie = await signIn(base, "u-sol@soullegal.com.au");
+    const session = await (await get(`${base}/api/session`, cookie)).json();
+    const attempt = async () => {
+      const a = await get(`${base}/authorize?response_type=code&client_id=${reg.client_id}&redirect_uri=${encodeURIComponent("https://attacker.example/cb")}&code_challenge=${challenge}&code_challenge_method=S256`);
+      const consentPath = a.headers.get("location")!;
+      const page = await (await get(`${base}${consentPath}`, cookie)).text();
+      const request = new URL(consentPath, base).searchParams.get("request")!;
+      const decided = await fetch(`${base}/oauth/consent`, { method: "POST", redirect: "manual", headers: { cookie, "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ request, csrf: session.csrf, decision: "approve" }) });
+      return { page, location: new URL(decided.headers.get("location")!) };
+    };
+    const blocked = await attempt();
+    expect(blocked.page).toContain("not on your firm's list of allowed AI clients");
+    expect(blocked.page).toMatch(/value="approve" disabled/);
+    expect(blocked.location.searchParams.get("error")).toBe("access_denied");
+    expect(blocked.location.searchParams.get("code")).toBeNull();
+
+    // A principal adds the host through settings: the same client can now connect.
+    settings.set({ ...settingsFor(app.store, TENANT), ai: { ...settingsFor(app.store, TENANT).ai, externalClientRedirectHosts: ["claude.ai", "attacker.example"] } });
+    expect((await attempt()).location.searchParams.get("code")).toBeTruthy();
+  });
 });

@@ -154,7 +154,8 @@ export function complianceCommands(store: Store, audit: AuditLog) {
       input: z.object({ requestId: z.string(), status: z.enum(["responded", "refused", "withdrawn"]), outcome: z.string().min(1) }),
       handler: ({ requestId, status, outcome }, ctx) => {
         const r = requests.find(ctx.actor.tenantId, requestId);
-        if (!r) throw notFound("Privacy request");
+        // Same visibility as list_privacy_requests: a request on a hidden matter does not exist for this caller.
+        if (!r || (r.matterId && !visibleMatters(store, ctx).some((m) => m.id === r.matterId))) throw notFound("Privacy request");
         return requests.set({ ...r, status, outcome, closedOn: today() });
       },
     }),

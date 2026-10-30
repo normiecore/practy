@@ -140,6 +140,32 @@ describe("filing respects walls and AI consent", () => {
     expect(documentsOf(app.store).list(TENANT, (d) => d.matterId === m2003)).toHaveLength(0);
   });
 
+  it("refuses to file or dismiss an item tied to a matter hidden on the calling surface", async () => {
+    const { app, m1998, m2003 } = await setupFiling("practy");
+    await app.bus.execute("run_mail_sweep", since, as(users.solicitor));
+    const filedTo2003 = app.filing.items.list(TENANT, (i) => i.matterId === m2003 && i.status === "filed")[0]!;
+    patch(app, m2003, { aiPermitted: false });
+    // Item ids are guessable, so an AI client must not be able to touch or read it by id.
+    await expect(app.bus.execute("dismiss_email", { itemId: filedTo2003.id }, as(users.solicitor, "agent"))).rejects.toMatchObject({ code: "not_found" });
+    await expect(app.bus.execute("file_email", { itemId: filedTo2003.id, matterId: m1998 }, as(users.solicitor, "mcp"))).rejects.toMatchObject({ code: "not_found" });
+    expect(app.filing.items.find(TENANT, filedTo2003.id)!.status).toBe("filed");
+    patch(app, m2003, { aiPermitted: true, restrictedTo: [users.principal.userId] });
+    await expect(app.bus.execute("dismiss_email", { itemId: filedTo2003.id }, as(users.solicitor))).rejects.toMatchObject({ code: "not_found" });
+  });
+
+  it("keeps an AI exclusion when excluded email content is filed again to another matter", async () => {
+    const { app, m1998, m2003 } = await setupFiling("practy");
+    await app.bus.execute("run_mail_sweep", since, as(users.solicitor));
+    const filed = app.filing.items.list(TENANT, (i) => i.matterId === m1998 && i.status === "filed" && !!i.documentIds?.length)[0]!;
+    for (const id of filed.documentIds!) {
+      await app.bus.execute("restrict_document_ai", { matterId: m1998, documentId: id, reason: "privileged" }, as(users.solicitor));
+    }
+    const refiled = (await app.bus.execute("file_email", { itemId: filed.id, matterId: m2003 }, as(users.solicitor))) as any;
+    const copies = documentsOf(app.store).list(TENANT, (d) => refiled.result.documentIds.includes(d.id));
+    expect(copies.length).toBeGreaterThan(0);
+    expect(copies.every((d) => d.aiExcluded && d.derivedFrom?.length)).toBe(true);
+  });
+
   it("hides queue items tied to no-AI matters from AI surfaces", async () => {
     const { app, m2003 } = await setupFiling("practy");
     patch(app, m2003, { aiPermitted: false });
@@ -166,6 +192,15 @@ describe("send_email recipients and approval detail", () => {
     await app.bus.execute("file_email", { itemId: queue[0].id, matterId: m2003 }, as(users.solicitor));
     const req = (await app.bus.execute("send_email", { matterId: m2003, to: ["physio@spark.com.au"], subject: "x", body: "y" }, as(users.solicitor, "agent"))) as any;
     expect(req.status).toBe("pending_approval");
+  });
+
+  it("does not let an AI client vouch for a sender by filing their email", async () => {
+    const { app, m2003 } = await setupFiling("practy");
+    await app.bus.execute("run_mail_sweep", since, as(users.solicitor));
+    const queue = ((await app.bus.execute("list_filing_queue", {}, as(users.solicitor, "agent"))) as any).result;
+    const fromPhysio = queue.find((i: any) => i.from === "physio@spark.com.au");
+    await app.bus.execute("file_email", { itemId: fromPhysio.id, matterId: m2003 }, as(users.solicitor, "agent"));
+    await expect(app.bus.execute("send_email", { matterId: m2003, to: ["physio@spark.com.au"], subject: "x", body: "y" }, as(users.solicitor, "agent"))).rejects.toMatchObject({ code: "invalid" });
   });
 
   it("shows the approver attachment names and rejects attachments from another matter up front", async () => {

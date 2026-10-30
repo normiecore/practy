@@ -75,6 +75,8 @@ describe("compliance registers", () => {
     expect((await exec<any[]>("list_privacy_requests", {}, as(users.paralegal))).map((r) => r.requesterName)).toEqual(["John Citizen"]);
     expect((await exec<any[]>("list_privacy_requests", {}, as(users.solicitor, "agent"))).map((r) => r.requesterName)).toEqual(["Toni Priestley"]);
     await expect(run("log_privacy_request", { kind: "other", requesterName: "X", matterId: walled.id, details: "x", receivedOn: "2026-09-01" }, as(users.paralegal))).rejects.toMatchObject({ code: "not_found" });
+    const walledRequest = app.store.collection<{ id: string; tenantId: string; matterId?: string }>("privacy_request").list(TENANT, (r) => r.matterId === walled.id)[0]!;
+    await expect(run("close_privacy_request", { requestId: walledRequest.id, status: "responded", outcome: "x" }, as(users.paralegal))).rejects.toMatchObject({ code: "not_found" });
 
     await exec("update_matter", { matterId: walled.id, status: "closed" }, as(users.solicitor));
     expect(await exec<any[]>("retention_report", {}, as(users.principal))).toHaveLength(0);

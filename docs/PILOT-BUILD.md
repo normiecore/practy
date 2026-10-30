@@ -75,8 +75,8 @@ Firm templates (the Authority to Settle form and the letterhead) are **tenant as
 6. **Firm-specific values:** the Authority B(j) label ("<Firm> fees") and the fee-earner categories come from tenant settings and the user list, not code.
 
 ## Current state (30 Oct 2026)
-- **Open PR:** normiecore/practy#3 (`claude/upbeat-edison-fszgfn` into `main`): key date precheck, `get_authority_to_settle`, Damages tab fix. CI green. Kept as a draft until the security fixes below are added to it.
-- **Security review done, fixes in progress:** findings are listed in `docs/SECURITY-REVIEW.md` (14 rows, 3 high). Fixes land on PR #3 and the status column is updated as each one merges. If a row still says "Fix in progress" and PR #3 has no matching commit, that fix did not finish.
+- **Open PR:** normiecore/practy#3 (`claude/upbeat-edison-fszgfn` into `main`): key date precheck, `get_authority_to_settle`, Damages tab fix and the security fixes. Ready to merge once CI is green.
+- **Security review done and fixed:** `docs/SECURITY-REVIEW.md` lists the 14 findings (3 high), all fixed with tests on PR #3, plus the behaviour changes and residual risks the firm should know about. The penetration test is still outstanding.
 - **Repo is public** (made public so Actions runs free; private runs were blocked by account billing). Keep client data, firm templates and credentials out of it.
 - **Old branches:** `pilot/connectors`, `pilot/docgen`, `pilot/damages-costs` and `research/strategy-and-compliance` are merged into `main` and can be deleted.
 - **Onboarding request for Soul Legal:** drafted in `docs/ONBOARDING-REQUEST.md`, not yet sent.
@@ -88,7 +88,7 @@ Firm templates (the Authority to Settle form and the letterhead) are **tenant as
 - **Web app next steps:** bespoke forms for damages and Authority to Settle (they use the generated form today); Playwright smoke tests in CI.
 - **Remaining before go-live:**
   - the web app (#14): review with the firm, then the next steps above;
-  - an independent security review, with fixes;
+  - an independent security review, with fixes (internal review done: `docs/SECURITY-REVIEW.md`; an external review is still advisable);
   - a real-account trial of each connector (Box CCG, Gmail, Xero sandbox, PracticePanther);
   - verifying the rules on the register (STRATEGY §9);
   - a pen test.

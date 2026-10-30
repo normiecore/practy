@@ -73,6 +73,13 @@ function allowedRedirectUri(uri: string): boolean {
   return u.protocol === "https:" || (u.protocol === "http:" && LOOPBACK.has(u.hostname));
 }
 
+/** Whether a firm lets an authorization code go to this redirect URI: loopback, or a host a principal listed in Settings. */
+export function redirectHostAllowed(store: Store, tenantId: string, redirectUri: string): boolean {
+  const { hostname } = new URL(redirectUri);
+  if (LOOPBACK.has(hostname)) return true;
+  return settingsFor(store, tenantId).ai.externalClientRedirectHosts.some((h) => h.trim().toLowerCase() === hostname.toLowerCase());
+}
+
 export interface ConsentRequest extends PendingAuthorization {
   clientName: string;
   /** Where the authorization code will be sent. Shown on the consent screen so a look-alike client is visible. */
@@ -156,6 +163,11 @@ export class PractyOAuthProvider implements OAuthServerProvider {
     if (!settingsFor(this.store, signedIn.user.tenantId).ai.externalMcpClients) {
       url.searchParams.set("error", "access_denied");
       url.searchParams.set("error_description", "External AI clients are disabled for this firm");
+      return url.href;
+    }
+    if (!redirectHostAllowed(this.store, signedIn.user.tenantId, p.params.redirectUri)) {
+      url.searchParams.set("error", "access_denied");
+      url.searchParams.set("error_description", "This client's address is not on the firm's list of allowed AI clients");
       return url.href;
     }
     const code = randomBytes(32).toString("base64url");
