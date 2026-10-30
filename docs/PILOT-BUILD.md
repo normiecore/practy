@@ -76,7 +76,7 @@ Firm templates (the Authority to Settle form and the letterhead) are **tenant as
 
 ## Current state (30 Oct 2026)
 - **Open PR:** normiecore/practy#3 (`claude/upbeat-edison-fszgfn` into `main`): key date precheck, `get_authority_to_settle`, Damages tab fix. CI green. Kept as a draft until the security fixes below are added to it.
-- **Security review in progress:** four areas (auth and sessions, authorisation and tenancy, input handling and data exposure, AI and web client), each finding checked by a second reviewer. Confirmed findings and their fixes get recorded here and land on PR #3. If this section still says "in progress" and the PR has no security commits, the review did not finish: rerun it.
+- **Security review done, fixes in progress:** findings are listed in `docs/SECURITY-REVIEW.md` (14 rows, 3 high). Fixes land on PR #3 and the status column is updated as each one merges. If a row still says "Fix in progress" and PR #3 has no matching commit, that fix did not finish.
 - **Repo is public** (made public so Actions runs free; private runs were blocked by account billing). Keep client data, firm templates and credentials out of it.
 - **Old branches:** `pilot/connectors`, `pilot/docgen`, `pilot/damages-costs` and `research/strategy-and-compliance` are merged into `main` and can be deleted.
 - **Onboarding request for Soul Legal:** drafted in `docs/ONBOARDING-REQUEST.md`, not yet sent.
