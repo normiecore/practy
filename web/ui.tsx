@@ -124,7 +124,7 @@ export function Loading({ state, children }: { state: Loaded<unknown>; children:
   return <>{children()}</>;
 }
 
-export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Modal({ title, onClose, wide, children }: { title: string; onClose: () => void; wide?: boolean; children: ReactNode }) {
   useEffect(() => {
     const on = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", on);
@@ -132,8 +132,8 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
   }, [onClose]);
   return (
     <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title}>
-        <div className="row" style={{ justifyContent: "space-between" }}>
+      <div className={wide ? "modal wide" : "modal"} role="dialog" aria-modal="true" aria-label={title}>
+        <div className="row" style={{ justifyContent: "space-between", flexWrap: "nowrap", alignItems: "flex-start" }}>
           <h2 style={{ margin: 0 }}>{title}</h2>
           <button className="ghost" onClick={onClose} aria-label="Close">
             ✕
