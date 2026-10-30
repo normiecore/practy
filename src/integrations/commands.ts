@@ -185,6 +185,10 @@ export function integrationCommands(deps: { store: Store; secrets: SecretStore; 
           upcoming: dates.filter((k) => k.date && k.date >= today && k.date <= horizon).sort((a, b) => a.date!.localeCompare(b.date!)).map(withMatter),
           needsAttention: dates.filter((k) => k.status === "proposed" || k.status === "manual_required").map(withMatter),
           approvalsPending: bus.approvals.list(ctx.actor.tenantId, "pending").length,
+          tasksDue: store
+            .collection<{ id: string; tenantId: string; assigneeId: string; status: string; dueOn?: string; title: string; matterId?: string }>("task")
+            .list(ctx.actor.tenantId, (t) => t.assigneeId === ctx.actor.userId && t.status === "open" && !!t.dueOn && t.dueOn <= horizon)
+            .sort((a, b) => a.dueOn!.localeCompare(b.dueOn!)),
           emailsToReview: store.collection<{ id: string; tenantId: string; userId: string; status: string }>("mail_item").list(ctx.actor.tenantId, (i) => i.userId === ctx.actor.userId && i.status === "review").length,
         };
       },

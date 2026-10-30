@@ -17,6 +17,7 @@ import { complianceCommands } from "../compliance/commands.js";
 import { damagesCommands } from "../damages/commands.js";
 import { costsCommands } from "../costs/commands.js";
 import { documentCommands } from "../documents/commands.js";
+import { workCommands } from "../work/commands.js";
 import { emailToPdf } from "../docgen/pdf.js";
 import { IntegrationHub } from "../integrations/hub.js";
 import { integrationCommands } from "../integrations/commands.js";
@@ -94,6 +95,7 @@ export function createApp(opts: AppOptions = {}): App {
     ...damagesCommands(store),
     ...costsCommands(store),
     ...documentCommands(store, hub),
+    ...workCommands(store),
   );
   const audit = new AuditLog(undefined, (entry) =>
     store.queue.enqueue(() => store.queue.persistence.appendAudit(entry)),
