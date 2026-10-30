@@ -25,7 +25,8 @@ export interface Matter {
   title: string;
   scheme: Scheme;
   status: "open" | "closed";
-  injuryDate: IsoDate;
+  /** Unknown for some imported matters: limitation then needs manual entry. */
+  injuryDate?: IsoDate;
   openedOn: IsoDate;
   parties: { partyId: string; role: PartyRole }[];
   responsibleUserId: string;

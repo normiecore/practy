@@ -115,7 +115,7 @@ export function domainCommands(store: Store, policy: FirmPolicy = DEFAULT_FIRM_P
         number: z.string().min(1),
         title: z.string().min(1),
         scheme: z.enum(SCHEMES),
-        injuryDate: isoDate,
+        injuryDate: isoDate.optional(),
         client: z.object({ name: z.string().min(1), dateOfBirth: isoDate.optional(), email: z.email().optional(), phone: z.string().optional(), address: z.string().optional() }),
         otherParties: z
           .array(z.object({ name: z.string().min(1), role: z.enum(PARTY_ROLES).exclude(["client"]), kind: z.enum(["person", "organisation"]).default("person"), email: z.email().optional() }))

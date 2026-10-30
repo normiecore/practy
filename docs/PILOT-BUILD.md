@@ -47,10 +47,10 @@ Firm templates (the Authority to Settle form and the letterhead) are **tenant as
 | 4 | Shadow trust ledger: Xero and trust add-on sources, reconciliation | ✅ done | `src/trust` |
 | 5 | Auth: Google and Microsoft sign-in (OIDC), dev login, sessions; OAuth 2.1 for MCP clients | ✅ done | `src/auth`; consent screen; firm switch for external clients; max-tier cap |
 | 6 | Secrets store (encrypted connector tokens), tenant settings, users and roles | ✅ done | `src/core/secrets.ts`, `src/admin` |
-| 7 | Connectors (parallel agent, branch `pilot/connectors`): Box and local document stores; Gmail and Microsoft 365 mail; Google and Outlook calendars; PracticePanther and CSV matter import | ⏳ | `src/connectors` |
+| 7 | Connectors (merged from `pilot/connectors`): Box and local document stores; Gmail and Microsoft 365 mail; Google and Outlook calendars; PracticePanther and CSV matter import | ✅ done | `src/connectors`, wired per firm in `src/integrations` (Box CCG, Gmail/Graph, calendars, Xero, PracticePanther and CSV import, OAuth connect flows) |
 | 8 | Document generation (parallel agent, branch `pilot/docgen`): naming convention, Authority to Settle (firm-template filler and tagged templates), letterhead letters, Form 17, affidavit/master book PDF, email-to-PDF, particulars docx | ⏳ | `src/docgen` |
-| 9 | Damages and settlement engine (parallel agent, branch `pilot/damages-costs`): particulars heads, settlement and Authority figures, clearances (Medicare, Centrelink, NDIS), Centrelink preclusion estimate | ⏳ | `src/damages` |
-| 10 | Costs (branch `pilot/damages-costs`): scales by determination and date, 6-minute time capture, timesheet, costs disclosure thresholds, uplift cap | ⏳ | `src/costs` |
+| 9 | Damages and settlement engine (parallel agent, branch `pilot/damages-costs`): particulars heads, settlement and Authority figures, clearances (Medicare, Centrelink, NDIS), Centrelink preclusion estimate | ✅ done | `src/damages` (merged); open questions for the firm listed below |
+| 10 | Costs (branch `pilot/damages-costs`): scales by determination and date, 6-minute time capture, timesheet, costs disclosure thresholds, uplift cap | ✅ done | `src/costs` (merged) |
 | 11 | Email filing pipeline: matching rules (matter number plus surname, thread history, party addresses), review queue, misc archive; a mode that drives the existing Apps Script through labels | ✅ done | `src/filing`; scheduled sweep wiring pending (#15) |
 | 12 | AI: model gateway (Anthropic API and Bedrock Sydney), in-app chat agent over the command registry, medical chronology with verified page citations, AI policy and consent | ✅ done | `src/ai`; chat streams over SSE at `/api/chat/:id/messages`; model id is configuration (`PRACTY_AI_MODEL`) |
 | 13 | Compliance: privacy requests (APP 12/13), breach register (NDB 30-day and ransomware 72-hour timers), ADM register and privacy-policy clause, AML intake screening, evidence-document flag, retention and legal hold, AI-use log export | ✅ done | `src/compliance` |
@@ -65,3 +65,11 @@ Firm templates (the Authority to Settle form and the letterhead) are **tenant as
 - Xero app credentials, the trust bank account id and the tracking category name. Or, if trust sits in an add-on: a cashbook export.
 - Opening trust balances for the shadow ledger, as at the start date.
 - An Anthropic API key, or AWS Bedrock in ap-southeast-2.
+
+## Open questions for Soul Legal (from building the damages and costs engines)
+1. **Interest on accruing losses:** past super and gratuitous services currently accrue interest at 3% from the start of each head to the calculation date. Should that be full-period or half-period?
+2. **Item 19 cap across Determinations:** the cap currently used is the one in the Determination in force at the latest work on the item, scaled proportionally. Is that right?
+3. **Recurring aids:** should recurring aids use annual ÷ 52.14 × multiplier × 0.95 like future medical (currently they are lump sums)?
+4. **Centrelink preclusion:** does the period run from the injury date or from when weekly payments stopped? Are part weeks dropped?
+5. **Release of funds:** should a known but unpaid charge block release of funds, or can it be paid from trust at the same time as the distribution?
+6. **Firm-specific values:** the Authority B(j) label ("<Firm> fees") and the fee-earner categories come from tenant settings and the user list, not code.

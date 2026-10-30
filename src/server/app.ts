@@ -17,6 +17,9 @@ import { complianceCommands } from "../compliance/commands.js";
 import { damagesCommands } from "../damages/commands.js";
 import { costsCommands } from "../costs/commands.js";
 import { IntegrationHub } from "../integrations/hub.js";
+import { integrationCommands } from "../integrations/commands.js";
+import { wireIntegrations } from "../integrations/factory.js";
+import type { ConnectProvider } from "../integrations/oauth.js";
 import { domainCommands, matterGuard } from "../domain/commands.js";
 import { Store } from "../domain/store.js";
 import { TrustService, trustCommands } from "../trust/commands.js";
@@ -30,6 +33,7 @@ export interface App {
   chronology: ChronologyService;
   hub: IntegrationHub;
   filing: FilingService;
+  connectProviders: Map<string, ConnectProvider>;
 }
 
 export interface AppOptions {
@@ -44,6 +48,9 @@ export interface AppOptions {
   hub?: IntegrationHub;
   /** Renders an email to PDF for filing. */
   renderEmailPdf?: (m: MailMessage) => Promise<Uint8Array>;
+  /** OAuth connect providers for data connectors; when given, connectors are built from settings and credentials. */
+  connectProviders?: Map<string, ConnectProvider>;
+  localDocumentsRoot?: string;
 }
 
 /** Composition root: one registry and one bus shared by the web app, REST API, MCP server and agents. */
@@ -87,9 +94,12 @@ export function createApp(opts: AppOptions = {}): App {
     matterGuard(store),
     () => store.flush(),
   );
+  const connectProviders = opts.connectProviders ?? new Map<string, ConnectProvider>();
+  if (!opts.hub) wireIntegrations({ store, secrets, hub, trust, providers: connectProviders, localDocumentsRoot: opts.localDocumentsRoot });
+  registry.register(...integrationCommands({ store, secrets, hub, bus, providers: connectProviders }));
   const agent = new AgentService(store, bus, chatModel);
   registry.register(...agentCommands(agent), ...complianceCommands(store, audit));
-  return { store, trust, bus, secrets, agent, chronology, hub, filing };
+  return { store, trust, bus, secrets, agent, chronology, hub, filing, connectProviders };
 }
 
 /** Opens an app over durable storage, restoring the working set and the audit chain. */

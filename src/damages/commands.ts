@@ -190,7 +190,7 @@ export function damagesCommands(store: Store) {
         const input: DamagesInput = {
           ...raw,
           scheme: raw.scheme ?? matter.scheme,
-          injuryDate: raw.injuryDate ?? matter.injuryDate,
+          injuryDate: raw.injuryDate ?? matter.injuryDate ?? (() => { throw invalid("Record the date of injury on the matter first"); })(),
           plaintiff: { ...raw.plaintiff, dateOfBirth, name: raw.plaintiff.name ?? clientOf(matter)?.name },
         } as DamagesInput;
         const model = engine(() => computeDamages(input));
@@ -243,7 +243,7 @@ export function damagesCommands(store: Store) {
         const input: AuthorityInput = {
           ...raw,
           clientName: raw.clientName ?? clientOf(matter)?.name,
-          injuryDate: raw.injuryDate ?? fmtDate(matter.injuryDate),
+          injuryDate: raw.injuryDate ?? (matter.injuryDate ? fmtDate(matter.injuryDate) : ""),
         } as AuthorityInput;
         const result = engine(() => computeAuthority(input));
         const charge = (kind: Clearance["kind"]) => {

@@ -22,7 +22,7 @@ export interface Actor {
  * Where a command was invoked from. AI surfaces ("mcp", "agent") are subject to
  * per-matter no-AI flags and are recorded in the AI-use log.
  */
-export type Surface = "ui" | "api" | "mcp" | "agent";
+export type Surface = "ui" | "api" | "mcp" | "agent" | "job";
 
 export const AI_SURFACES: readonly Surface[] = ["mcp", "agent"];
 

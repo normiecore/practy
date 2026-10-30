@@ -55,6 +55,9 @@ function ageOn(dob: IsoDate, on: IsoDate): number {
 
 function limitationDates(input: RuleInput, verified: boolean, source: string, extraNotes: string[]): ProposedDate[] {
   const { matter, client, firmPolicy } = input;
+  if (!matter.injuryDate) {
+    return [{ ruleId: "limitation.pi.3y", kind: "critical", title: "Limitation: injury date unknown — enter the limitation date", date: null, ruleVerified: false, source, notes: ["Record the date of injury on the matter, or enter the limitation date manually."] }];
+  }
   const { date, clamped } = addYears(matter.injuryDate, 3);
   const notes = [...extraNotes];
   if (clamped) notes.push("Injury date is 29 Feb; anniversary clamped to 28 Feb (conservative). Confirm.");

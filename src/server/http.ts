@@ -11,6 +11,8 @@ import { actorFor, AuthService, SESSION_COOKIE } from "../auth/service.js";
 import { PractyError } from "../core/errors.js";
 import type { Actor, Surface } from "../core/types.js";
 import { renderTranscript } from "../ai/agent.js";
+import { beginConnect, connectionSecretName, exchangeCode } from "../integrations/oauth.js";
+import type { TenantSettings } from "../admin/settings.js";
 import type { App } from "./app.js";
 import { buildMcpServer } from "./mcp.js";
 
@@ -186,6 +188,51 @@ export function createHttpServer(app: App, opts: HttpOptions) {
     }
   });
 
+  // ------------------------------------------------------------ connecting data sources (mailbox, calendar, Xero, PracticePanther)
+  const pendingConnects = new Map<string, { providerId: string; verifier: string; userId: string; tenantId: string; expires: number }>();
+  const connectRedirect = (id: string) => `${opts.baseUrl}/integrations/callback/${id}`;
+
+  http.get("/integrations/connect/:provider", (req, res) => {
+    const s = auth.session(sessionCookieFrom(req.headers.cookie));
+    if (!s) {
+      res.redirect(302, `/auth/login?returnTo=${encodeURIComponent(req.originalUrl)}`);
+      return;
+    }
+    const p = app.connectProviders.get(String(req.params.provider));
+    if (!p) {
+      res.status(404).send(page("Not available", "<h1>This connection is not configured on this server</h1>"));
+      return;
+    }
+    if (p.scope === "firm" && !s.user.roles.includes("principal")) {
+      res.status(403).send(page("Not allowed", "<h1>Only a principal can connect firm-wide systems</h1>"));
+      return;
+    }
+    const { url, state, verifier } = beginConnect(p, connectRedirect(p.id));
+    pendingConnects.set(state, { providerId: p.id, verifier, userId: s.user.id, tenantId: s.user.tenantId, expires: Date.now() + 600_000 });
+    res.redirect(302, url);
+  });
+
+  http.get("/integrations/callback/:provider", async (req, res) => {
+    const state = String(req.query.state ?? "");
+    const pending = pendingConnects.get(state);
+    pendingConnects.delete(state);
+    const s = auth.session(sessionCookieFrom(req.headers.cookie));
+    const p = app.connectProviders.get(String(req.params.provider));
+    if (!pending || !p || pending.providerId !== p.id || pending.expires < Date.now() || !s || s.user.id !== pending.userId) {
+      res.status(400).send(page("Connection failed", "<h1>Connection request expired or invalid</h1><a class=\"btn\" href=\"/settings\">Back to settings</a>"));
+      return;
+    }
+    try {
+      const token = await exchangeCode(p, String(req.query.code ?? ""), connectRedirect(p.id), pending.verifier);
+      app.secrets.set(pending.tenantId, connectionSecretName(p, pending.userId), token);
+      if (p.id === "xero") await rememberXeroTenant(app, pending.tenantId, token.accessToken);
+      await app.store.flush();
+      res.redirect(302, `/settings?connected=${p.id}`);
+    } catch (err) {
+      res.status(502).send(page("Connection failed", `<h1>Connection failed</h1><p>${escapeHtml((err as Error).message)}</p>`));
+    }
+  });
+
   // ------------------------------------------------------------ in-app assistant (streams Server-Sent Events)
   const apiError = (res: Response, err: unknown) => {
     if (err instanceof PractyError) res.status(STATUS[err.code]).json({ error: err.code, message: err.message });
@@ -333,4 +380,15 @@ ${enabled ? "" : '<p><strong>External AI clients are switched off for your firm.
   }
 
   return http;
+}
+
+/** After connecting Xero, record the organisation id when the user granted exactly one. */
+async function rememberXeroTenant(app: App, tenantId: string, accessToken: string): Promise<void> {
+  const res = await fetch("https://api.xero.com/connections", { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!res.ok) return;
+  const orgs = (await res.json()) as { tenantId: string; tenantType: string }[];
+  const only = orgs.filter((o) => o.tenantType === "ORGANISATION");
+  if (only.length !== 1) return;
+  const s = settingsFor(app.store, tenantId);
+  app.store.collection<TenantSettings>("tenant_settings").set({ ...s, trust: { ...s.trust, xeroTenantId: only[0]!.tenantId }, updatedAt: new Date().toISOString() });
 }

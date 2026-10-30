@@ -59,6 +59,8 @@ export interface TenantSettings {
     accountName: string;
     opening?: { asAt: string; cashbook: number; clientLedgers: Record<string, number> };
     statementMapping: { date: string; amount?: string; credit?: string; debit?: string; description: string };
+    /** Column mapping for a trust add-on's cashbook export (when source is addon_csv). */
+    cashbookMapping?: { date: string; matter: string; party: string; reference?: string; amount?: string; receipt?: string; payment?: string; type?: string; transferPattern?: string };
   };
   letter: {
     senderName: string;
