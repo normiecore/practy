@@ -43,6 +43,15 @@ describe("matter import", () => {
     expect(again.result).toMatchObject({ created: 0 });
     expect(again.result.skipped).toHaveLength(3);
   });
+
+  it("trims imported matter numbers and skips ones that cannot name a folder", async () => {
+    const app = createApp();
+    const csv = `Matter Number,Client\n 1998 ,Toni Priestley\n1998 - Priestley,Someone Else\n2001,John Citizen\n`;
+    const run = (await app.bus.execute("import_matters_csv", { csv, columns: { number: "Matter Number", clientName: "Client" }, dryRun: false }, as(users.principal))) as any;
+    expect(run.result.createdNumbers).toEqual(["1998", "2001"]);
+    expect(run.result.skipped).toEqual([{ number: "1998 - Priestley", reason: expect.stringMatching(/no spaces/) }]);
+    expect(app.store.matterByNumber(TENANT, "1998")!.number).toBe("1998");
+  });
 });
 
 describe("calendar sync and digest", () => {

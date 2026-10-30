@@ -20,6 +20,7 @@ import type { Matter } from "../domain/model.js";
 import type { Store } from "../domain/store.js";
 import { clientSortName } from "../filing/service.js";
 import type { IntegrationHub } from "../integrations/hub.js";
+import { matterFolderId } from "./folders.js";
 import { documentsOf, type MatterDocument } from "./model.js";
 
 export interface Template {
@@ -59,14 +60,8 @@ export function documentCommands(store: Store, hub: IntegrationHub) {
   const partiesOf = (m: Matter) => m.parties.map((l) => ({ role: l.role, party: store.parties.get(l.partyId)! })).filter((p) => p.party);
   const clientOf = (m: Matter) => partiesOf(m).find((p) => p.role === "client")?.party;
 
-  async function matterFolder(ds: DocumentStore, m: Matter): Promise<string> {
-    if (m.links.boxFolderId && ds.kind === "box") return m.links.boxFolderId;
-    const s = settingsFor(store, m.tenantId);
-    const found = await ds.findMatterFolder(m.number);
-    const folder = found ?? (await ds.ensureMatterFolder({ number: m.number, clientSortName: clientSortName(clientOf(m)?.name ?? m.title), schemeLabel: s.documents.schemeLabels[m.scheme] }));
-    if (ds.kind === "box") store.matters.set({ ...m, links: { ...m.links, boxFolderId: folder.id } });
-    return folder.id;
-  }
+  const matterFolder = (ds: DocumentStore, m: Matter): Promise<string> =>
+    matterFolderId(store, ds, m, () => ({ number: m.number, clientSortName: clientSortName(clientOf(m)?.name ?? m.title), schemeLabel: settingsFor(store, m.tenantId).documents.schemeLabels[m.scheme] }));
 
   /** Saves bytes into the matter (never overwriting: a clash adds the time) and indexes them. */
   async function save(ctx: InvocationContext, m: Matter, name: string, bytes: Uint8Array, contentType: string, extra: Partial<MatterDocument> = {}, subfolder?: string): Promise<MatterDocument> {

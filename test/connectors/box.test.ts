@@ -52,6 +52,26 @@ describe("BoxDocumentStore", () => {
     expect(f.calls[0]!.headers.Authorization).toBe("Bearer test-token");
   });
 
+  it("matches the whole number part of a folder name, not a prefix of it", async () => {
+    const { f, box } = store();
+    f.on("GET", `${API}/search`, { total_count: 1, entries: [folder("202", "1998 - Priestley, Toni - MVA")] });
+    expect(await box.findMatterFolder("1998 - Priestley")).toBeNull();
+    expect(await box.findMatterFolder(" 1998 ")).toMatchObject({ id: "202" });
+  });
+
+  it("getMatterFolder accepts only the matter's own folder directly under the root", async () => {
+    const { f, box } = store();
+    f.on("GET", `${API}/folders/202`, folder("202", "1998 - Priestley, Toni - MVA"));
+    f.on("GET", `${API}/folders/203`, folder("203", "1998 - Correspondence", "202"));
+    f.on("GET", `${API}/folders/404`, json({ type: "error", status: 404, code: "not_found" }, 404));
+    expect(await box.getMatterFolder("202", "1998")).toMatchObject({ id: "202" });
+    expect(await box.getMatterFolder("202", "2001")).toBeNull();
+    expect(await box.getMatterFolder("203", "1998")).toBeNull();
+    expect(await box.getMatterFolder("404", "1998")).toBeNull();
+    expect(await box.getMatterFolder(ROOT, "1998")).toBeNull();
+    expect(f.calls.some((c) => c.url.startsWith(`${API}/folders/${ROOT}`))).toBe(false);
+  });
+
   it("returns null for zero or several prefix matches, paging through search results", async () => {
     const { f, box } = store();
     f.once("GET", `${API}/search`, { total_count: 3, entries: [folder("1", "2001 - A, B - MVA"), folder("2", "2001 - A, B - WC")] });

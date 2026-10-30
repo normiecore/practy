@@ -7,6 +7,7 @@ import { defineCommand } from "../core/registry.js";
 import type { Actor } from "../core/types.js";
 import type { Matter } from "../domain/model.js";
 import type { Store } from "../domain/store.js";
+import { matterFolderId } from "../documents/folders.js";
 import { documentsOf, type MatterDocument } from "../documents/model.js";
 import type { IntegrationHub } from "../integrations/hub.js";
 import { DEFAULT_MISC, matchEmail, normaliseActionNumber, type MatchDecision, type MatterIndexEntry } from "./matcher.js";
@@ -214,14 +215,11 @@ export class FilingService {
   }
 
   private async emailsFolder(docs: DocumentStore, matter: Matter, schemeLabel: string, sub: string): Promise<string> {
-    let folderId = matter.links.boxFolderId;
-    if (!folderId || docs.kind !== "box") {
-      const found = await docs.findMatterFolder(matter.number);
+    const folderId = await matterFolderId(this.store, docs, matter, () => {
       const client = matter.parties.find((p) => p.role === "client");
       const clientName = client ? (this.store.parties.get(client.partyId)?.name ?? matter.title) : matter.title;
-      folderId = (found ?? (await docs.ensureMatterFolder({ number: matter.number, clientSortName: clientSortName(clientName), schemeLabel }))).id;
-      if (docs.kind === "box") this.store.matters.set({ ...matter, links: { ...matter.links, boxFolderId: folderId } });
-    }
+      return { number: matter.number, clientSortName: clientSortName(clientName), schemeLabel };
+    });
     return (await docs.ensureSubfolder(folderId, sub)).id;
   }
 

@@ -60,10 +60,12 @@ export class NameConflictError extends Error {
  */
 export interface DocumentStore {
   readonly kind: "box" | "local";
-  /** Find the matter folder by its number prefix under the configured matters root. */
+  /** Find the matter folder by its number (the name part before " - ") under the configured matters root. */
   findMatterFolder(number: string): Promise<FolderRef | null>;
   /** Create `<number> - <clientSortName> - <schemeLabel>` under the root if missing. */
   ensureMatterFolder(spec: MatterFolderSpec): Promise<FolderRef>;
+  /** The folder with this id if it is the matter folder for `number` directly under the matters root, else null. */
+  getMatterFolder(folderId: string, number: string): Promise<FolderRef | null>;
   ensureSubfolder(parentId: string, name: string): Promise<FolderRef>;
   listFolder(folderId: string): Promise<{ folders: FolderRef[]; files: FileRef[] }>;
   upload(folderId: string, name: string, bytes: Uint8Array, contentType?: string): Promise<FileRef>;

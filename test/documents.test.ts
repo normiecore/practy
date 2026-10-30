@@ -88,3 +88,45 @@ describe("document workflow", () => {
     expect(TENANT).toBe("t-soul");
   });
 });
+
+describe("matter folder binding", () => {
+  /** Matter 1998 has a file in its folder and is walled to the solicitor; the paralegal opens another matter. */
+  async function walled() {
+    const t = await setup();
+    await t.exec("upload_document", { matterId: t.matter.id, name: "2025.06.01 Medical Report.pdf", base64: b64(new TextEncoder().encode("secret")) });
+    t.app.store.matters.set({ ...t.app.store.matters.get(t.matter.id)!, restrictedTo: [users.solicitor.userId] });
+    const walledFolder = t.app.store.matters.get(t.matter.id)!.links.boxFolderId!;
+    return { ...t, walledFolder };
+  }
+  const open = (exec: Awaited<ReturnType<typeof setup>>["exec"], number: string, extra: object = {}) =>
+    exec("create_matter", { number, title: "x", scheme: "icwa_mva", client: { name: "X Y" }, ...extra }, users.paralegal);
+
+  it("does not bind a new matter to a walled matter's folder by a look-alike number", async () => {
+    const { app, exec, walledFolder } = await walled();
+    await expect(open(exec, "1998 ")).rejects.toMatchObject({ code: "conflict" });
+    await expect(open(exec, "1998 - Priestley")).rejects.toMatchObject({ code: "invalid" });
+    // A longer number whose folder does not yet exist gets its own new folder, not 1998's.
+    const { matter } = await open(exec, "19980");
+    expect((await exec("sync_matter_documents", { matterId: matter.id }, users.paralegal)).added).toBe(0);
+    expect(app.store.matters.get(matter.id)!.links.boxFolderId).not.toBe(walledFolder);
+  });
+
+  it("only links a Box folder that is the matter's own folder in the matters root", async () => {
+    const { exec, store, app, walledFolder } = await walled();
+    const { matter } = await open(exec, "2001");
+    for (const boxFolderId of ["root", walledFolder, "0"]) {
+      await expect(exec("update_matter", { matterId: matter.id, boxFolderId }, users.paralegal)).rejects.toMatchObject({ code: expect.stringMatching(/invalid|conflict/) });
+      await expect(open(exec, "2002", { boxFolderId })).rejects.toMatchObject({ code: expect.stringMatching(/invalid|conflict/) });
+    }
+    expect(app.store.matters.get(matter.id)!.links.boxFolderId).toBeUndefined();
+
+    const own = await store.ensureMatterFolder({ number: "2001", clientSortName: "Y, X", schemeLabel: "MVA" });
+    const updated = await exec("update_matter", { matterId: matter.id, boxFolderId: own.id }, users.paralegal);
+    expect(updated.links.boxFolderId).toBe(own.id);
+
+    // A link stored some other way (or before this check existed) is refused at sync time.
+    app.store.matters.set({ ...app.store.matters.get(matter.id)!, links: { boxFolderId: "root" } });
+    await expect(exec("sync_matter_documents", { matterId: matter.id }, users.paralegal)).rejects.toMatchObject({ code: "invalid" });
+    expect((await exec("list_documents", { matterId: matter.id }, users.paralegal)).length).toBe(0);
+  });
+});

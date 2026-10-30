@@ -10,7 +10,7 @@ import { CsvMatterImporter, type CsvMatterColumns } from "../connectors/importer
 import { PracticePantherImporter } from "../connectors/importers/practicepanther.js";
 import type { ImportedMatter, MatterImporter } from "../connectors/types.js";
 import { tokenProvider } from "../core/secrets.js";
-import { visibleMatters } from "../domain/commands.js";
+import { MATTER_NUMBER, visibleMatters } from "../domain/commands.js";
 import type { KeyDate } from "../domain/model.js";
 import type { Store } from "../domain/store.js";
 import type { BoxCredentials, TrustExport } from "./factory.js";
@@ -36,7 +36,12 @@ export function integrationCommands(deps: { store: Store; secrets: SecretStore; 
     const rows = await importer.listMatters();
     const created: string[] = [];
     const skipped: { number: string; reason: string }[] = [];
-    for (const r of rows) {
+    for (const row of rows) {
+      const r = { ...row, number: row.number.trim() };
+      if (!MATTER_NUMBER.test(r.number)) {
+        skipped.push({ number: r.number, reason: "matter number must be letters, digits, '.', '_' or '-' with no spaces" });
+        continue;
+      }
       if (store.matterByNumber(ctx.actor.tenantId, r.number)) {
         skipped.push({ number: r.number, reason: "already in Practy" });
         continue;
