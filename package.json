@@ -10,9 +10,12 @@
   "scripts": {
     "dev": "tsx watch src/server/main.ts",
     "start": "tsx src/server/main.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p web",
     "test": "vitest run",
-    "check": "npm run typecheck && npm test"
+    "check": "npm run typecheck && npm test",
+    "dev:web": "vite",
+    "build:web": "vite build",
+    "build": "vite build"
   },
   "dependencies": {
     "@anthropic-ai/bedrock-sdk": "^1.1.0",
