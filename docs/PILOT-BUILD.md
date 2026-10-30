@@ -51,9 +51,9 @@ Firm templates (the Authority to Settle form and the letterhead) are **tenant as
 | 8 | Document generation (parallel agent, branch `pilot/docgen`): naming convention, Authority to Settle (firm-template filler and tagged templates), letterhead letters, Form 17, affidavit/master book PDF, email-to-PDF, particulars docx | ⏳ | `src/docgen` |
 | 9 | Damages and settlement engine (parallel agent, branch `pilot/damages-costs`): particulars heads, settlement and Authority figures, clearances (Medicare, Centrelink, NDIS), Centrelink preclusion estimate | ⏳ | `src/damages` |
 | 10 | Costs (branch `pilot/damages-costs`): scales by determination and date, 6-minute time capture, timesheet, costs disclosure thresholds, uplift cap | ⏳ | `src/costs` |
-| 11 | Email filing pipeline: matching rules (matter number plus surname, thread history, party addresses), review queue, misc archive; a mode that drives the existing Apps Script through labels | ⏳ | |
+| 11 | Email filing pipeline: matching rules (matter number plus surname, thread history, party addresses), review queue, misc archive; a mode that drives the existing Apps Script through labels | ✅ done | `src/filing`; scheduled sweep wiring pending (#15) |
 | 12 | AI: model gateway (Anthropic API and Bedrock Sydney), in-app chat agent over the command registry, medical chronology with verified page citations, AI policy and consent | ✅ done | `src/ai`; chat streams over SSE at `/api/chat/:id/messages`; model id is configuration (`PRACTY_AI_MODEL`) |
-| 13 | Compliance: privacy requests (APP 12/13), breach register (NDB 30-day and ransomware 72-hour timers), ADM register and privacy-policy clause, AML intake screening, evidence-document flag, retention and legal hold, AI-use log export | ⏳ | |
+| 13 | Compliance: privacy requests (APP 12/13), breach register (NDB 30-day and ransomware 72-hour timers), ADM register and privacy-policy clause, AML intake screening, evidence-document flag, retention and legal hold, AI-use log export | ✅ done | `src/compliance` |
 | 14 | Web app (React): matters, matter workspace, approvals inbox, diary, filing review, documents, chronology, damages, settlement, trust, compliance, settings, chat | ⏳ | `web/` |
 | 15 | Deploy: Dockerfile, docker-compose, AWS ap-southeast-2 guide, backups, onboarding runbook | ⏳ | |
 

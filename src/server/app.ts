@@ -13,6 +13,7 @@ import { ClaudeGateway, type ChatModel } from "../ai/gateway.js";
 import type { MatterDocument } from "../documents/model.js";
 import type { MailMessage } from "../connectors/types.js";
 import { FilingService, filingCommands } from "../filing/service.js";
+import { complianceCommands } from "../compliance/commands.js";
 import { IntegrationHub } from "../integrations/hub.js";
 import { domainCommands, matterGuard } from "../domain/commands.js";
 import { Store } from "../domain/store.js";
@@ -83,7 +84,7 @@ export function createApp(opts: AppOptions = {}): App {
     () => store.flush(),
   );
   const agent = new AgentService(store, bus, chatModel);
-  registry.register(...agentCommands(agent));
+  registry.register(...agentCommands(agent), ...complianceCommands(store, audit));
   return { store, trust, bus, secrets, agent, chronology, hub, filing };
 }
 
