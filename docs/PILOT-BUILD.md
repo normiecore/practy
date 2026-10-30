@@ -74,6 +74,13 @@ Firm templates (the Authority to Settle form and the letterhead) are **tenant as
 5. **Release of funds:** should a known but unpaid charge block release of funds, or can it be paid from trust at the same time as the distribution?
 6. **Firm-specific values:** the Authority B(j) label ("<Firm> fees") and the fee-earner categories come from tenant settings and the user list, not code.
 
+## Current state (30 Oct 2026)
+- **Open PR:** normiecore/practy#3 (`claude/upbeat-edison-fszgfn` into `main`): key date precheck, `get_authority_to_settle`, Damages tab fix. CI green. Kept as a draft until the security fixes below are added to it.
+- **Security review in progress:** four areas (auth and sessions, authorisation and tenancy, input handling and data exposure, AI and web client), each finding checked by a second reviewer. Confirmed findings and their fixes get recorded here and land on PR #3. If this section still says "in progress" and the PR has no security commits, the review did not finish: rerun it.
+- **Repo is public** (made public so Actions runs free; private runs were blocked by account billing). Keep client data, firm templates and credentials out of it.
+- **Old branches:** `pilot/connectors`, `pilot/docgen`, `pilot/damages-costs` and `research/strategy-and-compliance` are merged into `main` and can be deleted.
+- **Onboarding request for Soul Legal:** drafted in `docs/ONBOARDING-REQUEST.md`, not yet sent.
+
 ## Handover notes (keep current)
 - **Run locally:** see README → Development. Tests: `npm run check`. Include the Postgres test with `TEST_DATABASE_URL=postgres://…`.
 - **How to add a capability:** write a `defineCommand` in the module's `commands.ts`, register it in `src/server/app.ts`, and add a test. It then appears automatically in REST, MCP and the assistant.
