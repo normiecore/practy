@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { usersOf } from "../src/admin/commands.js";
 import { settingsFor, type TenantSettings } from "../src/admin/settings.js";
 import { DevOidcProvider } from "../src/auth/oidc.js";
-import { AuthService } from "../src/auth/service.js";
+import { AuthService, safeReturnTo } from "../src/auth/service.js";
 import { createHttpServer } from "../src/server/http.js";
 import { setup, TENANT, users } from "./helpers.js";
 
@@ -78,6 +78,20 @@ describe("staff sign-in", () => {
     const cookie = await signIn(base, "u-sol@soullegal.com.au");
     expect(cookie).toMatch(/^practy_session=/);
   });
+
+  it("keeps post-login redirects on this origin, including backslash tricks", async () => {
+    for (const bad of ["//evil.example", "/\\evil.example", "/\\/evil.example", "\\evil.example", "/\tevil", "https://evil.example", "", "evil", 7]) {
+      expect(safeReturnTo(bad)).toBe("/");
+    }
+    for (const ok of ["/", "/matters", "/matters/m1?tab=trust#x"]) expect(safeReturnTo(ok)).toBe(ok);
+
+    const { base } = await start();
+    const login = await get(`${base}/auth/login/dev?returnTo=${encodeURIComponent("/\\evil.example/session-expired")}`);
+    const state = new URL(login.headers.get("location")!, base).searchParams.get("state")!;
+    const cb = await get(`${base}/auth/callback/dev?state=${state}&code=${encodeURIComponent("u-sol@soullegal.com.au")}`);
+    expect(cb.status).toBe(302);
+    expect(cb.headers.get("location")).toBe("/");
+  });
 });
 
 describe("MCP OAuth for external AI clients", () => {
@@ -98,6 +112,8 @@ describe("MCP OAuth for external AI clients", () => {
       expect((await get(`${base}${consentPath}`)).headers.get("location")).toMatch(/^\/auth\/login\?returnTo=/);
       const page = await (await get(`${base}${consentPath}`, cookie)).text();
       expect(page).toContain("Connect Claude to Practy?");
+      expect(page).toContain("<strong>localhost:7777</strong>");
+      expect(page).not.toContain("Unverified client");
       const session = await (await get(`${base}/api/session`, cookie)).json();
       const request = new URL(consentPath, base).searchParams.get("request")!;
       const decided = await fetch(`${base}/oauth/consent`, { method: "POST", redirect: "manual", headers: { cookie, "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ request, csrf: session.csrf, decision: "approve" }) });
@@ -130,5 +146,57 @@ describe("MCP OAuth for external AI clients", () => {
     const refreshed = await (await fetch(`${base}/token`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: tok.refresh_token, client_id: reg.client_id }) })).json();
     expect(refreshed.access_token).toMatch(/^pa_/);
     expect((await fetch(`${base}/mcp`, { method: "POST", headers: { Authorization: "Bearer pa_bogus", "Content-Type": "application/json" }, body: "{}" })).status).toBe(401);
+  });
+
+  it("shows where the code goes and refuses non-https redirect URIs other than loopback", async () => {
+    const { base } = await start();
+    const register = (redirect: string, name = "Claude Desktop") =>
+      fetch(`${base}/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ client_name: name, redirect_uris: [redirect], token_endpoint_auth_method: "none" }) });
+    expect((await register("http://attacker.example/cb")).status).toBe(400);
+    expect((await register("javascript:alert(1)")).status).toBe(400);
+
+    const reg = await (await register("https://attacker.example/cb", "Claude Desktop<script>")).json();
+    const challenge = createHash("sha256").update("v").digest("base64url");
+    const a = await get(`${base}/authorize?response_type=code&client_id=${reg.client_id}&redirect_uri=${encodeURIComponent("https://attacker.example/cb")}&code_challenge=${challenge}&code_challenge_method=S256`);
+    const cookie = await signIn(base, "u-sol@soullegal.com.au");
+    const page = await (await get(`${base}${a.headers.get("location")!}`, cookie)).text();
+    expect(page).toContain("<strong>attacker.example</strong>");
+    expect(page).toContain(reg.client_id);
+    expect(page).toContain("Unverified client");
+    expect(page).not.toContain("<script>");
+
+    const known = await (await register("https://claude.ai/api/mcp/auth_callback")).json();
+    const b = await get(`${base}/authorize?response_type=code&client_id=${known.client_id}&redirect_uri=${encodeURIComponent("https://claude.ai/api/mcp/auth_callback")}&code_challenge=${challenge}&code_challenge_method=S256`);
+    const knownPage = await (await get(`${base}${b.headers.get("location")!}`, cookie)).text();
+    expect(knownPage).toContain("<strong>claude.ai</strong>");
+    expect(knownPage).not.toContain("Unverified client");
+  });
+
+  it("issues no code to a redirect host the firm has not allowed, even if Allow is posted", async () => {
+    const { base, app } = await start();
+    const settings = app.store.collection<TenantSettings>("tenant_settings");
+    const current = settingsFor(app.store, TENANT);
+    settings.set({ ...current, ai: { ...current.ai, externalMcpClients: true } });
+    const reg = await (await fetch(`${base}/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ client_name: "Claude", redirect_uris: ["https://attacker.example/cb"], token_endpoint_auth_method: "none" }) })).json();
+    const challenge = createHash("sha256").update("v").digest("base64url");
+    const cookie = await signIn(base, "u-sol@soullegal.com.au");
+    const session = await (await get(`${base}/api/session`, cookie)).json();
+    const attempt = async () => {
+      const a = await get(`${base}/authorize?response_type=code&client_id=${reg.client_id}&redirect_uri=${encodeURIComponent("https://attacker.example/cb")}&code_challenge=${challenge}&code_challenge_method=S256`);
+      const consentPath = a.headers.get("location")!;
+      const page = await (await get(`${base}${consentPath}`, cookie)).text();
+      const request = new URL(consentPath, base).searchParams.get("request")!;
+      const decided = await fetch(`${base}/oauth/consent`, { method: "POST", redirect: "manual", headers: { cookie, "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ request, csrf: session.csrf, decision: "approve" }) });
+      return { page, location: new URL(decided.headers.get("location")!) };
+    };
+    const blocked = await attempt();
+    expect(blocked.page).toContain("not on your firm's list of allowed AI clients");
+    expect(blocked.page).toMatch(/value="approve" disabled/);
+    expect(blocked.location.searchParams.get("error")).toBe("access_denied");
+    expect(blocked.location.searchParams.get("code")).toBeNull();
+
+    // A principal adds the host through settings: the same client can now connect.
+    settings.set({ ...settingsFor(app.store, TENANT), ai: { ...settingsFor(app.store, TENANT).ai, externalClientRedirectHosts: ["claude.ai", "attacker.example"] } });
+    expect((await attempt()).location.searchParams.get("code")).toBeTruthy();
   });
 });

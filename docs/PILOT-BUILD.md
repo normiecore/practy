@@ -2,7 +2,7 @@
 
 *This is the living plan. Update the status column in the same commit as the work, so anyone picking up (another account, another session) can continue from GitHub alone.*
 
-**Working branch:** `claude/upbeat-edison-fszgfn` (continues `research/strategy-and-compliance`)
+**Working branch:** `main` (all earlier branches are merged into it). Feature work goes on short branches with a PR into `main`.
 **Pilot:** Soul Legal (Perth/Baldivis). ICWA motor vehicle and WorkCover WA matters. Box stays the document store. Xero (or a trust add-on) stays the trust record during the shadow phase.
 
 ## Firm context discovered (from Soul Legal's existing Claude skills)
@@ -74,15 +74,21 @@ Firm templates (the Authority to Settle form and the letterhead) are **tenant as
 5. **Release of funds:** should a known but unpaid charge block release of funds, or can it be paid from trust at the same time as the distribution?
 6. **Firm-specific values:** the Authority B(j) label ("<Firm> fees") and the fee-earner categories come from tenant settings and the user list, not code.
 
+## Current state (30 Oct 2026)
+- **Open PR:** normiecore/practy#3 (`claude/upbeat-edison-fszgfn` into `main`): key date precheck, `get_authority_to_settle`, Damages tab fix and the security fixes. Ready to merge once CI is green.
+- **Security review done and fixed:** `docs/SECURITY-REVIEW.md` lists the 14 findings (3 high), all fixed with tests on PR #3, plus the behaviour changes and residual risks the firm should know about. The penetration test is still outstanding.
+- **Repo is public** (made public so Actions runs free; private runs were blocked by account billing). Keep client data, firm templates and credentials out of it.
+- **Old branches:** `pilot/connectors`, `pilot/docgen`, `pilot/damages-costs` and `research/strategy-and-compliance` are merged into `main` and can be deleted.
+- **Onboarding request for Soul Legal:** drafted in `docs/ONBOARDING-REQUEST.md`, not yet sent.
+
 ## Handover notes (keep current)
 - **Run locally:** see README → Development. Tests: `npm run check`. Include the Postgres test with `TEST_DATABASE_URL=postgres://…`.
 - **How to add a capability:** write a `defineCommand` in the module's `commands.ts`, register it in `src/server/app.ts`, and add a test. It then appears automatically in REST, MCP and the assistant.
-- **Branches:** `pilot/connectors`, `pilot/docgen` and `pilot/damages-costs` are merged here. The web app was built on this branch.
-- **Web app next steps:** bespoke forms for damages and Authority to Settle (they use the generated form today); a stored-authority read command so the Settlement tab can show the last computed version after a reload; Playwright smoke tests in CI.
-- **Known gap:** `confirm_key_date` with an unknown key date id still creates an approval (no precheck before approval, unlike `send_email`).
+- **Branches:** `pilot/connectors`, `pilot/docgen`, `pilot/damages-costs` and `research/strategy-and-compliance` are all merged into `main`.
+- **Web app next steps:** bespoke forms for damages and Authority to Settle (they use the generated form today); Playwright smoke tests in CI.
 - **Remaining before go-live:**
   - the web app (#14): review with the firm, then the next steps above;
-  - an independent security review, with fixes;
+  - an independent security review, with fixes (internal review done: `docs/SECURITY-REVIEW.md`; an external review is still advisable);
   - a real-account trial of each connector (Box CCG, Gmail, Xero sandbox, PracticePanther);
   - verifying the rules on the register (STRATEGY §9);
   - a pen test.

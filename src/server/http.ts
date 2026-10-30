@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { settingsFor } from "../admin/settings.js";
-import { PractyOAuthProvider, sessionCookieFrom } from "../auth/mcp-oauth.js";
+import { PractyOAuthProvider, redirectHostAllowed, sessionCookieFrom } from "../auth/mcp-oauth.js";
 import { actorFor, AuthService, SESSION_COOKIE } from "../auth/service.js";
 import { PractyError } from "../core/errors.js";
 import type { Actor, Surface } from "../core/types.js";
@@ -327,15 +327,19 @@ export function createHttpServer(app: App, opts: HttpOptions) {
       return;
     }
     const enabled = settingsFor(app.store, s.user.tenantId).ai.externalMcpClients;
+    const allowed = redirectHostAllowed(app.store, s.user.tenantId, pending.params.redirectUri);
     res.send(
       page(
         "Connect AI client · Practy",
         `<h1>Connect ${escapeHtml(pending.clientName)} to Practy?</h1>
+<p>Access will be sent to <strong>${escapeHtml(pending.redirectHost)}</strong> (client ID <code>${escapeHtml(pending.clientId)}</code>).
+${pending.verified ? "" : "<strong>Unverified client:</strong> the name above was chosen by whoever registered it. Only allow this if you started the connection yourself and recognise that address."}</p>
 <p>It will act as <strong>${escapeHtml(s.user.displayName)}</strong> (${escapeHtml(s.user.email)}) and can read and draft on matters you can see.
 Legal-risk and trust actions still need approval in Practy. Matter data will be processed by the AI provider under your firm's plan.</p>
 ${enabled ? "" : '<p><strong>External AI clients are switched off for your firm.</strong> A principal can enable them in Settings.</p>'}
+${allowed ? "" : `<p><strong>${escapeHtml(pending.redirectHost)} is not on your firm's list of allowed AI clients.</strong> A principal can add it in Settings (AI, allowed client hosts) if it is genuine.</p>`}
 <form method="post" action="/oauth/consent"><input type="hidden" name="request" value="${escapeHtml(id)}"><input type="hidden" name="csrf" value="${escapeHtml(s.session.csrf)}">
-<button name="decision" value="approve"${enabled ? "" : " disabled"}>Allow</button><button class="secondary" name="decision" value="deny">Deny</button></form>`,
+<button name="decision" value="approve"${enabled && allowed ? "" : " disabled"}>Allow</button><button class="secondary" name="decision" value="deny">Deny</button></form>`,
       ),
     );
   });

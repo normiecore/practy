@@ -31,6 +31,16 @@ describe("LocalDocumentStore", () => {
     await expect(store.ensureMatterFolder(spec)).rejects.toThrow(/Several folders/);
   });
 
+  it("matches whole matter numbers and checks a folder id belongs to the matter", async () => {
+    const created = await store.ensureMatterFolder(spec);
+    expect(await store.findMatterFolder("1998 - Priestley")).toBeNull();
+    expect(await store.getMatterFolder(created.id, "1998")).toEqual(created);
+    expect(await store.getMatterFolder(created.id, "2001")).toBeNull();
+    expect(await store.getMatterFolder("Matters", "1998")).toBeNull();
+    expect(await store.getMatterFolder(`${created.id}/Sub`, "1998")).toBeNull();
+    expect(await store.getMatterFolder("Matters/1998 - Missing - MVA", "1998")).toBeNull();
+  });
+
   it("uploads, lists, downloads, renames and moves with root-relative ids", async () => {
     const matter = await store.ensureMatterFolder(spec);
     const emails = await store.ensureSubfolder(matter.id, "Emails");

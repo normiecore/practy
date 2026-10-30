@@ -42,8 +42,10 @@ export class Store {
     return this.matters.list(tenantId);
   }
 
+  /** Matter numbers are unique per firm ignoring case and surrounding whitespace. */
   matterByNumber(tenantId: string, number: string): Matter | undefined {
-    return this.matters.list(tenantId, (m) => m.number === number)[0];
+    const n = number.trim().toLowerCase();
+    return this.matters.list(tenantId, (m) => m.number.trim().toLowerCase() === n)[0];
   }
 
   keyDatesFor(tenantId: string, matterId?: string): KeyDate[] {

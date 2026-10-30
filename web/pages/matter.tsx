@@ -641,14 +641,15 @@ interface StoredDamages {
 }
 
 function Damages({ matterId }: { matterId: string }) {
-  const dmg = useLoad<StoredDamages>("get_damages", { matterId });
+  const dmg = useLoad<{ current: StoredDamages }>("get_damages", { matterId });
+  const latest = dmg.data?.current;
   const fixed = { matterId };
   const missing = dmg.error && /not found/i.test(dmg.error);
   return (
     <div className="stack">
       <div className="row">
-        <FormButton label={dmg.data ? "New version" : "Compute damages"} name="compute_damages" fixed={fixed} initial={dmg.data ? withoutMatter(dmg.data.input) : undefined} />
-        {dmg.data && <FormButton label="Particulars (docx)" secondary name="generate_particulars" fixed={fixed} initial={{ version: dmg.data.version }} />}
+        <FormButton label={latest ? "New version" : "Compute damages"} name="compute_damages" fixed={fixed} initial={latest ? withoutMatter(latest.input) : undefined} />
+        {latest && <FormButton label="Particulars (docx)" secondary name="generate_particulars" fixed={fixed} initial={{ version: latest.version }} />}
         <FormButton label="Centrelink preclusion" secondary name="estimate_centrelink_preclusion" fixed={fixed} />
       </div>
       {missing ? (
@@ -656,7 +657,7 @@ function Damages({ matterId }: { matterId: string }) {
       ) : (
         <Loading state={dmg}>
           {() => {
-            const d = dmg.data!;
+            const d = dmg.data!.current;
             const notes = [...d.model.flags, ...d.audit];
             return (
               <>
@@ -725,7 +726,8 @@ const withoutMatter = (input: Record<string, unknown>) => {
 
 function Settlement({ m }: { m: MatterDetail }) {
   const fixed = { matterId: m.id };
-  const [authority, setAuthority] = useState<{ id: string; version: number; result: Record<string, unknown>; statement: unknown }>();
+  const saved = useLoad<{ current: { id: string; version: number; input: Record<string, unknown>; result: Record<string, unknown>; statement: unknown } }>("get_authority_to_settle", fixed);
+  const authority = saved.data?.current;
   const clearances = useLoad("list_clearances", fixed);
   const client = m.parties.find((p) => p.role === "client")?.party?.name;
   return (
@@ -738,16 +740,15 @@ function Settlement({ m }: { m: MatterDetail }) {
               label="Compute"
               name="compute_authority_to_settle"
               fixed={fixed}
-              initial={{ clientName: client, injuryDate: m.injuryDate }}
-              doneMessage={false}
-              onDone={(out) => out.status === "executed" && setAuthority(out.result as never)}
+              initial={authority ? withoutMatter(authority.input) : { clientName: client }}
+              doneMessage="Authority to Settle saved as a new version"
             />
             {authority && <FormButton label="Generate document" secondary name="generate_authority_document" fixed={{ ...fixed, draftId: authority.id }} />}
           </>
         }
       >
         {authority ? (
-          <div className="grid">
+          <div className="stack">
             <div className="card">
               <h3>Figures (version {authority.version})</h3>
               <Value value={Object.fromEntries(Object.entries(authority.result).filter(([k]) => /Cents$/.test(k)))} />

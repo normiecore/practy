@@ -8,7 +8,7 @@ import {
   type FolderRef,
   type MatterFolderSpec,
 } from "../types.js";
-import { assertItemName, matterFolderName } from "./naming.js";
+import { assertItemName, isMatterFolderFor, matterFolderName } from "./naming.js";
 
 /**
  * Filesystem document store for firms without a DMS, and for development.
@@ -47,6 +47,17 @@ export class LocalDocumentStore implements DocumentStore {
       throw new Error(`Several folders are numbered ${spec.number}: ${matches.map((m) => m.name).join("; ")}`);
     }
     return matches[0] ?? this.ensureSubfolder(this.mattersFolder, matterFolderName(spec));
+  }
+
+  async getMatterFolder(folderId: string, number: string): Promise<FolderRef | null> {
+    const id = normaliseId(folderId);
+    if (!id || parentOf(id) !== this.mattersFolder || !isMatterFolderFor(path.posix.basename(id), number)) return null;
+    try {
+      return (await fs.stat(this.abs(id))).isDirectory() ? this.folderRef(id) : null;
+    } catch (e) {
+      if (code(e) === "ENOENT") return null;
+      throw e;
+    }
   }
 
   async ensureSubfolder(parentId: string, name: string): Promise<FolderRef> {
@@ -107,7 +118,6 @@ export class LocalDocumentStore implements DocumentStore {
   async setMetadata(_fileId: string, _metadata: Record<string, string>): Promise<void> {}
 
   private async matterFolders(number: string): Promise<FolderRef[]> {
-    const prefix = `${number.trim()} - `;
     let entries;
     try {
       entries = await fs.readdir(this.abs(this.mattersFolder), { withFileTypes: true });
@@ -116,7 +126,7 @@ export class LocalDocumentStore implements DocumentStore {
       throw e;
     }
     return entries
-      .filter((e) => e.isDirectory() && e.name.startsWith(prefix))
+      .filter((e) => e.isDirectory() && isMatterFolderFor(e.name, number))
       .map((e) => this.folderRef(join(this.mattersFolder, e.name)));
   }
 

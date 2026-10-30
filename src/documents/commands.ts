@@ -20,7 +20,8 @@ import type { Matter } from "../domain/model.js";
 import type { Store } from "../domain/store.js";
 import { clientSortName } from "../filing/service.js";
 import type { IntegrationHub } from "../integrations/hub.js";
-import { documentsOf, type MatterDocument } from "./model.js";
+import { matterFolderId } from "./folders.js";
+import { documentsOf, excludedTwin, type MatterDocument } from "./model.js";
 
 export interface Template {
   id: string;
@@ -59,14 +60,8 @@ export function documentCommands(store: Store, hub: IntegrationHub) {
   const partiesOf = (m: Matter) => m.parties.map((l) => ({ role: l.role, party: store.parties.get(l.partyId)! })).filter((p) => p.party);
   const clientOf = (m: Matter) => partiesOf(m).find((p) => p.role === "client")?.party;
 
-  async function matterFolder(ds: DocumentStore, m: Matter): Promise<string> {
-    if (m.links.boxFolderId && ds.kind === "box") return m.links.boxFolderId;
-    const s = settingsFor(store, m.tenantId);
-    const found = await ds.findMatterFolder(m.number);
-    const folder = found ?? (await ds.ensureMatterFolder({ number: m.number, clientSortName: clientSortName(clientOf(m)?.name ?? m.title), schemeLabel: s.documents.schemeLabels[m.scheme] }));
-    if (ds.kind === "box") store.matters.set({ ...m, links: { ...m.links, boxFolderId: folder.id } });
-    return folder.id;
-  }
+  const matterFolder = (ds: DocumentStore, m: Matter): Promise<string> =>
+    matterFolderId(store, ds, m, () => ({ number: m.number, clientSortName: clientSortName(clientOf(m)?.name ?? m.title), schemeLabel: settingsFor(store, m.tenantId).documents.schemeLabels[m.scheme] }));
 
   /** Saves bytes into the matter (never overwriting: a clash adds the time) and indexes them. */
   async function save(ctx: InvocationContext, m: Matter, name: string, bytes: Uint8Array, contentType: string, extra: Partial<MatterDocument> = {}, subfolder?: string): Promise<MatterDocument> {
@@ -99,6 +94,16 @@ export function documentCommands(store: Store, hub: IntegrationHub) {
     if (!d || d.matterId !== matterId) throw notFound(`Document ${documentId}`);
     if (!/pdf/i.test(d.contentType) && !d.name.toLowerCase().endsWith(".pdf")) throw invalid(`${d.name} is not a PDF`);
     return { doc: d, bytes: await hub.requireDocuments(ctx.actor.tenantId).download(d.storeFileId) };
+  };
+
+  /** Flags a derived copy inherits, so compiling or converting a document cannot launder an AI exclusion away. */
+  const inherited = (sources: MatterDocument[]): Partial<MatterDocument> => {
+    const excluded = sources.filter((d) => d.aiExcluded);
+    return {
+      derivedFrom: sources.map((d) => d.id),
+      ...(sources.some((d) => d.evidence) ? { evidence: true } : {}),
+      ...(excluded.length ? { aiExcluded: true, aiExcludedReason: excluded.map((d) => `${d.name}${d.aiExcludedReason ? `: ${d.aiExcludedReason}` : ""}`).join("; ") } : {}),
+    };
   };
 
   return [
@@ -165,11 +170,13 @@ export function documentCommands(store: Store, hub: IntegrationHub) {
           for (const f of files) {
             if (known.has(f.id)) continue;
             const date = /^(\d{4})\.(\d{2})\.(\d{2})/.exec(f.name);
+            const excluded = excludedTwin(store, ctx.actor.tenantId, { sha1: f.sha1 });
             docs.set({
               id: randomUUID(), tenantId: ctx.actor.tenantId, matterId, store: ds.kind, storeFileId: f.id, folderId, name: f.name,
               contentType: f.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : f.name.toLowerCase().endsWith(".docx") ? DOCX : "application/octet-stream",
               size: f.size, sha1: f.sha1, docDate: date ? `${date[1]}-${date[2]}-${date[3]}` : undefined, category: path || undefined, source: "import",
               createdAt: new Date().toISOString(), createdBy: ctx.actor.userId,
+              ...(excluded ? { aiExcluded: true, aiExcludedReason: excluded.aiExcludedReason, derivedFrom: [excluded.id] } : {}),
             });
             added++;
           }
@@ -398,7 +405,10 @@ export function documentCommands(store: Store, hub: IntegrationHub) {
                 markPrefix,
                 annexures: pdfs.slice(1).map((p, i) => ({ description: label(i + 1), sources: [{ bytes: p.bytes }] })),
               });
-        const doc = await save(ctx, m, `${dotted(todayIso())} ${title}.pdf`.replace(/[\\/:*?"<>|]/g, "-"), result.bytes, "application/pdf", { docType: mode === "book" ? "Court book" : "Affidavit with annexures" });
+        const doc = await save(ctx, m, `${dotted(todayIso())} ${title}.pdf`.replace(/[\\/:*?"<>|]/g, "-"), result.bytes, "application/pdf", {
+          docType: mode === "book" ? "Court book" : "Affidavit with annexures",
+          ...inherited(pdfs.map((p) => p.doc)),
+        });
         return { document: doc, pages: result.pageCount, entries: result.entries };
       },
     }),
@@ -417,7 +427,7 @@ export function documentCommands(store: Store, hub: IntegrationHub) {
         if (!d || d.matterId !== matterId) throw notFound("Document");
         if (!d.name.toLowerCase().endsWith(".docx")) throw invalid("Only .docx files have tracked changes");
         const { bytes, report } = tracksToMarkup(await hub.requireDocuments(ctx.actor.tenantId).download(d.storeFileId));
-        const doc = await save(ctx, m, d.name.replace(/\.docx$/i, " (markup for filing).docx"), bytes, DOCX, { docType: d.docType, docDate: d.docDate });
+        const doc = await save(ctx, m, d.name.replace(/\.docx$/i, " (markup for filing).docx"), bytes, DOCX, { docType: d.docType, docDate: d.docDate, ...inherited([d]) });
         return { document: doc, report };
       },
     }),

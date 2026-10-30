@@ -40,16 +40,58 @@ describe("WA PI rule pack", () => {
     expect(keyDates.find((k: any) => k.ruleId === "limitation.pi.3y").ruleVerified).toBe(false);
     expect(keyDates.some((k: any) => k.ruleId === "icwa.notice")).toBe(false);
 
-    // A caller-supplied approvalId is ignored: confirmation still goes to approval.
-    const early = await run("confirm_key_date", { matterId: matter.id, keyDateId: election.id }, { ...as(users.solicitor), approvalId: "forged" });
-    expect(early.status).toBe("pending_approval");
-    if (early.status !== "pending_approval") throw new Error();
-    // Approving a confirmation of a date that was never entered fails safely.
-    const failed = await exec("decide_approval", { approvalId: early.approvalId, decision: "approve" }, as(users.principal));
-    expect(failed).toMatchObject({ status: "failed", error: "Enter the date before confirming" });
+    // A date that was never entered is refused before it reaches the approvals inbox,
+    // and a caller-supplied approvalId does not skip that check.
+    await expect(
+      run("confirm_key_date", { matterId: matter.id, keyDateId: election.id }, { ...as(users.solicitor), approvalId: "forged" }),
+    ).rejects.toMatchObject({ code: "conflict", message: "Enter the date before confirming" });
+    expect(await exec("list_approvals", { status: "pending" }, as(users.principal))).toEqual([]);
     const filled = await exec("propose_key_date", { matterId: matter.id, keyDateId: election.id, date: "2027-06-30", note: "per advice" }, as(users.solicitor));
     expect(filled.status).toBe("proposed");
     expect((await run("confirm_key_date", { matterId: matter.id, keyDateId: election.id }, as(users.solicitor))).status).toBe("pending_approval");
+  });
+
+  it("refuses to request confirmation of a key date that does not exist on the matter", async () => {
+    const { exec, run } = setup();
+    const { matter, keyDates } = await openMatter(exec);
+    const other = await openMatter(exec, { number: "SL-2003", client: { name: "Other Client" } });
+    await expect(run("confirm_key_date", { matterId: matter.id, keyDateId: "missing" }, as(users.solicitor))).rejects.toMatchObject({ code: "not_found" });
+    await expect(run("confirm_key_date", { matterId: matter.id, keyDateId: other.keyDates[0].id }, as(users.solicitor))).rejects.toMatchObject({ code: "not_found" });
+    expect(await exec("list_approvals", { status: "pending" }, as(users.principal))).toEqual([]);
+    expect((await run("confirm_key_date", { matterId: matter.id, keyDateId: keyDates[0].id }, as(users.solicitor))).status).toBe("pending_approval");
+  });
+
+  it("binds a confirmation to the date that was reviewed", async () => {
+    const { app, exec, run } = setup();
+    const { matter, keyDates } = await openMatter(exec);
+    const lim = keyDates.find((k: any) => k.ruleId === "limitation.pi.3y");
+    await expect(run("confirm_key_date", { matterId: matter.id, keyDateId: lim.id, date: "2030-01-01" }, as(users.paralegal))).rejects.toMatchObject({ code: "conflict" });
+    const pending = await run("confirm_key_date", { matterId: matter.id, keyDateId: lim.id }, as(users.paralegal));
+    if (pending.status !== "pending_approval") throw new Error();
+    expect(app.bus.approvals.get(users.paralegal.tenantId, pending.approvalId)!.input).toMatchObject({ date: "2028-03-14" });
+    // The date is swapped while the approval waits: approving must not confirm the new date.
+    await exec("propose_key_date", { matterId: matter.id, keyDateId: lim.id, date: "2029-03-14" }, as(users.paralegal));
+    const decided = await exec("decide_approval", { approvalId: pending.approvalId, decision: "approve" }, as(users.solicitor));
+    expect(decided).toMatchObject({ status: "failed", error: expect.stringMatching(/changed to 2029-03-14/) });
+    expect(app.store.keyDates.get(lim.id)!.status).toBe("proposed");
+  });
+
+  it("normalises matter numbers and keeps them unique ignoring case and spaces", async () => {
+    const { exec, run } = setup();
+    const { matter } = await openMatter(exec, { number: " SL-1998 " });
+    expect(matter.number).toBe("SL-1998");
+    await expect(openMatter(exec, { number: "SL-1998 " })).rejects.toMatchObject({ code: "conflict" });
+    await expect(openMatter(exec, { number: "sl-1998" })).rejects.toMatchObject({ code: "conflict" });
+    for (const number of ["SL-1998 - Priestley, Toni", "SL 1998", "../1998", ""]) {
+      await expect(run("create_matter", { number, title: "x", scheme: "icwa_mva", client: { name: "X Y" } }, as(users.solicitor))).rejects.toMatchObject({ code: "invalid" });
+    }
+  });
+
+  it("refuses a Box folder link when Box is not connected", async () => {
+    const { exec, run } = setup();
+    const { matter } = await openMatter(exec);
+    await expect(run("update_matter", { matterId: matter.id, boxFolderId: "0" }, as(users.paralegal))).rejects.toMatchObject({ code: "invalid" });
+    await expect(openMatter(exec, { number: "SL-2", boxFolderId: "0" })).rejects.toMatchObject({ code: "invalid" });
   });
 
   it("derives Medicare deadlines from matter events", async () => {

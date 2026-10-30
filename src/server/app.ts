@@ -88,7 +88,7 @@ export function createApp(opts: AppOptions = {}): App {
   const chronology = new ChronologyService(store, chatModel, loadBytes);
   const registry = new Registry().register(
     ...adminCommands(store),
-    ...domainCommands(store),
+    ...domainCommands(store, undefined, (tenantId) => hub.documents(tenantId)),
     ...trustCommands(store, trust),
     ...chronologyCommands(chronology),
     ...filingCommands(filing),

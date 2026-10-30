@@ -87,4 +87,83 @@ describe("document workflow", () => {
     expect((await exec("list_documents", { matterId: matter.id })).length).toBe(6);
     expect(TENANT).toBe("t-soul");
   });
+
+  it("indexes a copy of excluded content found in another matter's folder as excluded", async () => {
+    const { app, exec, matter, store } = await setup();
+    const original = await exec("upload_document", { matterId: matter.id, name: "2026.01.01 Privileged advice.pdf", base64: b64(await pdf("Privileged")), contentType: "application/pdf" });
+    await exec("restrict_document_ai", { matterId: matter.id, documentId: original.id, reason: "privileged" });
+    // The Box fake does not hash files; give the original the hash Box would report.
+    const docs = app.store.collection<any>("document");
+    docs.set({ ...docs.get(original.id), sha1: "same-bytes" });
+    const { matter: other } = await exec("create_matter", { number: "2004", title: "Other v ICWA", scheme: "icwa_mva", injuryDate: "2025-03-14", client: { name: "Sam Other" } });
+    const folder = await store.ensureMatterFolder({ number: "2004", clientSortName: "Other, Sam", schemeLabel: "MVA" });
+    // The firm's own automation drops a copy into the other matter's folder.
+    store.files.set("copy", { ref: { id: "copy", name: "2026.01.01 Advice.pdf", folderId: folder.id, size: 10, modifiedAt: "2026-10-30T00:00:00Z", sha1: "same-bytes" }, bytes: new Uint8Array(10) });
+    expect((await exec("sync_matter_documents", { matterId: other.id })).added).toBe(1);
+    const copy = (await exec("list_documents", { matterId: other.id }))[0];
+    expect(copy).toMatchObject({ aiExcluded: true, derivedFrom: [original.id] });
+  });
+
+  it("carries AI exclusion and evidence flags onto court books and markup copies", async () => {
+    const { exec, matter } = await setup();
+    const up = (name: string, bytes: Uint8Array, contentType: string) => exec("upload_document", { matterId: matter.id, name, base64: b64(bytes), contentType });
+    const privileged = await up("2026.01.01 Privileged advice.pdf", await pdf("Privileged"), "application/pdf");
+    const affidavit = await up("2026.10.30 Affidavit of Kevin.pdf", await pdf("Affidavit"), "application/pdf");
+    const draft = await up("2026.10.30 Statement.docx", makeDocx({ body: p(r("text")) }), "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    await exec("restrict_document_ai", { matterId: matter.id, documentId: privileged.id, reason: "privileged" });
+    await exec("mark_evidence_document", { matterId: matter.id, documentId: affidavit.id, evidence: true });
+
+    const book = await exec("build_court_book", { matterId: matter.id, mode: "book", title: "Book", documentIds: [affidavit.id, privileged.id] });
+    expect(book.document).toMatchObject({ aiExcluded: true, evidence: true, derivedFrom: [affidavit.id, privileged.id] });
+    expect(book.document.aiExcludedReason).toContain("privileged");
+    await expect(exec("build_chronology", { matterId: matter.id, documentId: book.document.id })).rejects.toMatchObject({ code: "forbidden", message: expect.stringContaining("excluded from AI") });
+
+    // Excluding a source later also excludes copies already made from it.
+    const markup = await exec("remove_tracked_changes", { matterId: matter.id, documentId: draft.id });
+    expect(markup.document.aiExcluded).toBeUndefined();
+    await exec("restrict_document_ai", { matterId: matter.id, documentId: draft.id, reason: "implied undertaking" });
+    expect(await exec("get_document", { matterId: matter.id, documentId: markup.document.id })).toMatchObject({ aiExcluded: true, derivedFrom: [draft.id] });
+  });
+});
+
+describe("matter folder binding", () => {
+  /** Matter 1998 has a file in its folder and is walled to the solicitor; the paralegal opens another matter. */
+  async function walled() {
+    const t = await setup();
+    await t.exec("upload_document", { matterId: t.matter.id, name: "2025.06.01 Medical Report.pdf", base64: b64(new TextEncoder().encode("secret")) });
+    t.app.store.matters.set({ ...t.app.store.matters.get(t.matter.id)!, restrictedTo: [users.solicitor.userId] });
+    const walledFolder = t.app.store.matters.get(t.matter.id)!.links.boxFolderId!;
+    return { ...t, walledFolder };
+  }
+  const open = (exec: Awaited<ReturnType<typeof setup>>["exec"], number: string, extra: object = {}) =>
+    exec("create_matter", { number, title: "x", scheme: "icwa_mva", client: { name: "X Y" }, ...extra }, users.paralegal);
+
+  it("does not bind a new matter to a walled matter's folder by a look-alike number", async () => {
+    const { app, exec, walledFolder } = await walled();
+    await expect(open(exec, "1998 ")).rejects.toMatchObject({ code: "conflict" });
+    await expect(open(exec, "1998 - Priestley")).rejects.toMatchObject({ code: "invalid" });
+    // A longer number whose folder does not yet exist gets its own new folder, not 1998's.
+    const { matter } = await open(exec, "19980");
+    expect((await exec("sync_matter_documents", { matterId: matter.id }, users.paralegal)).added).toBe(0);
+    expect(app.store.matters.get(matter.id)!.links.boxFolderId).not.toBe(walledFolder);
+  });
+
+  it("only links a Box folder that is the matter's own folder in the matters root", async () => {
+    const { exec, store, app, walledFolder } = await walled();
+    const { matter } = await open(exec, "2001");
+    for (const boxFolderId of ["root", walledFolder, "0"]) {
+      await expect(exec("update_matter", { matterId: matter.id, boxFolderId }, users.paralegal)).rejects.toMatchObject({ code: expect.stringMatching(/invalid|conflict/) });
+      await expect(open(exec, "2002", { boxFolderId })).rejects.toMatchObject({ code: expect.stringMatching(/invalid|conflict/) });
+    }
+    expect(app.store.matters.get(matter.id)!.links.boxFolderId).toBeUndefined();
+
+    const own = await store.ensureMatterFolder({ number: "2001", clientSortName: "Y, X", schemeLabel: "MVA" });
+    const updated = await exec("update_matter", { matterId: matter.id, boxFolderId: own.id }, users.paralegal);
+    expect(updated.links.boxFolderId).toBe(own.id);
+
+    // A link stored some other way (or before this check existed) is refused at sync time.
+    app.store.matters.set({ ...app.store.matters.get(matter.id)!, links: { boxFolderId: "root" } });
+    await expect(exec("sync_matter_documents", { matterId: matter.id }, users.paralegal)).rejects.toMatchObject({ code: "invalid" });
+    expect((await exec("list_documents", { matterId: matter.id }, users.paralegal)).length).toBe(0);
+  });
 });

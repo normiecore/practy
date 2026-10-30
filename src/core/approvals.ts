@@ -15,6 +15,8 @@ export interface Approval {
   command: string;
   tier: Exclude<Tier, 0 | 1>;
   input: unknown;
+  /** Server-resolved detail for the approver; informational, never executed. */
+  context?: Record<string, unknown>;
   matterIds: string[];
   requestedBy: string;
   requestedVia: Surface;

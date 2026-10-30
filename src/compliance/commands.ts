@@ -6,6 +6,7 @@ import type { AuditLog } from "../core/audit.js";
 import { addDays, addYears, type IsoDate } from "../core/calendar.js";
 import { conflict, notFound } from "../core/errors.js";
 import { defineCommand } from "../core/registry.js";
+import { visibleMatters } from "../domain/commands.js";
 import type { Store } from "../domain/store.js";
 import { documentsOf } from "../documents/model.js";
 
@@ -121,6 +122,11 @@ export function complianceCommands(store: Store, audit: AuditLog) {
     return DEFAULT_ADM.map((e, i) => adm.set({ ...e, id: `${tenantId}:adm:${i}`, tenantId, updatedAt: new Date().toISOString() }));
   };
 
+  const admOwned = (tenantId: string, id?: string) => {
+    // admFor seeds the default entries so their ids can be edited before the register is first listed.
+    if (id && !admFor(tenantId).some((e) => e.id === id)) throw notFound("Register entry");
+  };
+
   return [
     // ------------------------------------------------------------ APP 12/13 requests
     defineCommand({
@@ -136,6 +142,7 @@ export function complianceCommands(store: Store, audit: AuditLog) {
         details: z.string().min(1),
         receivedOn: z.iso.date(),
       }),
+      matterIds: (i) => (i.matterId ? [i.matterId] : []),
       handler: (input, ctx) =>
         requests.set({ ...input, id: randomUUID(), tenantId: ctx.actor.tenantId, dueBy: addDays(input.receivedOn, 30), status: "open", loggedBy: ctx.actor.userId }),
     }),
@@ -147,7 +154,8 @@ export function complianceCommands(store: Store, audit: AuditLog) {
       input: z.object({ requestId: z.string(), status: z.enum(["responded", "refused", "withdrawn"]), outcome: z.string().min(1) }),
       handler: ({ requestId, status, outcome }, ctx) => {
         const r = requests.find(ctx.actor.tenantId, requestId);
-        if (!r) throw notFound("Privacy request");
+        // Same visibility as list_privacy_requests: a request on a hidden matter does not exist for this caller.
+        if (!r || (r.matterId && !visibleMatters(store, ctx).some((m) => m.id === r.matterId))) throw notFound("Privacy request");
         return requests.set({ ...r, status, outcome, closedOn: today() });
       },
     }),
@@ -157,11 +165,13 @@ export function complianceCommands(store: Store, audit: AuditLog) {
       description: "Privacy requests with due dates and overdue flags.",
       tier: 0,
       input: z.object({ openOnly: z.boolean().default(true) }),
-      handler: ({ openOnly }, ctx) =>
-        requests
-          .list(ctx.actor.tenantId, (r) => !openOnly || r.status === "open")
+      handler: ({ openOnly }, ctx) => {
+        const visible = new Set(visibleMatters(store, ctx).map((m) => m.id));
+        return requests
+          .list(ctx.actor.tenantId, (r) => (!openOnly || r.status === "open") && (!r.matterId || visible.has(r.matterId)))
           .map((r) => ({ ...r, overdue: r.status === "open" && r.dueBy < today() }))
-          .sort((a, b) => a.dueBy.localeCompare(b.dueBy)),
+          .sort((a, b) => a.dueBy.localeCompare(b.dueBy));
+      },
     }),
 
     // ------------------------------------------------------------ NDB scheme and ransomware
@@ -254,7 +264,12 @@ export function complianceCommands(store: Store, audit: AuditLog) {
       tier: 2,
       approverRoles: ["principal"],
       input: z.object({ id: z.string().optional(), system: z.string().min(1), decisions: z.string().min(1), personalInformation: z.string().min(1), humanReview: z.string().min(1), active: z.boolean().default(true) }),
-      handler: ({ id, ...e }, ctx) => adm.set({ ...e, id: id ?? randomUUID(), tenantId: ctx.actor.tenantId, updatedAt: new Date().toISOString() }),
+      precheck: ({ id }, ctx) => admOwned(ctx.actor.tenantId, id),
+      handler: ({ id, ...e }, ctx) => {
+        // A caller-supplied id must name this tenant's entry, never another tenant's.
+        admOwned(ctx.actor.tenantId, id);
+        return adm.set({ ...e, id: id ?? randomUUID(), tenantId: ctx.actor.tenantId, updatedAt: new Date().toISOString() });
+      },
     }),
     defineCommand({
       name: "privacy_policy_adm_clause",
@@ -294,7 +309,7 @@ export function complianceCommands(store: Store, audit: AuditLog) {
       tier: 0,
       input: z.object({}),
       handler: (_i, ctx) => {
-        const open = store.matters.list(ctx.actor.tenantId, (m) => m.status === "open");
+        const open = visibleMatters(store, ctx).filter((m) => m.status === "open");
         return {
           questions: AML_QUESTIONS,
           openMatters: open.length,
@@ -308,13 +323,32 @@ export function complianceCommands(store: Store, audit: AuditLog) {
     defineCommand({
       name: "restrict_document_ai",
       title: "Exclude a document from AI",
-      description: "Exclude a document from all AI processing (suppressed, privileged or implied-undertaking material).",
+      description: "Exclude a document from all AI processing (suppressed, privileged or implied-undertaking material). Chronology events already extracted from it are hidden from AI surfaces, and copies compiled from it inherit the exclusion.",
       tier: 1,
       input: z.object({ matterId: z.string(), documentId: z.string(), reason: z.string().min(1) }),
       matterIds: (i) => [i.matterId],
       handler: ({ matterId, documentId, reason }, ctx) => {
         const d = documentsOf(store).find(ctx.actor.tenantId, documentId);
         if (!d || d.matterId !== matterId) throw notFound("Document");
+        // Copies already compiled or converted from it (court books, markup copies) are excluded too,
+        // and so are files with the same content anywhere in the firm (the same email filed to several matters).
+        const all = documentsOf(store).list(ctx.actor.tenantId);
+        const excluded = new Set([d.id]);
+        const sameContent = (x: { sha1?: string; emailMessageId?: string; name: string }) =>
+          (!!d.sha1 && x.sha1 === d.sha1) || (!!d.emailMessageId && x.emailMessageId === d.emailMessageId && x.name === d.name);
+        for (const x of documentsOf(store).list(ctx.actor.tenantId, (x) => x.id !== d.id && sameContent(x))) {
+          excluded.add(x.id);
+          if (!x.aiExcluded) documentsOf(store).set({ ...x, aiExcluded: true, aiExcludedReason: `same content as ${d.name}: ${reason}` });
+        }
+        for (let grew = true; grew; ) {
+          grew = false;
+          for (const x of all) {
+            if (excluded.has(x.id) || !x.derivedFrom?.some((id) => excluded.has(id))) continue;
+            excluded.add(x.id);
+            grew = true;
+            if (!x.aiExcluded) documentsOf(store).set({ ...x, aiExcluded: true, aiExcludedReason: `derived from ${d.name}: ${reason}` });
+          }
+        }
         return documentsOf(store).set({ ...d, aiExcluded: true, aiExcludedReason: reason });
       },
     }),
@@ -369,8 +403,8 @@ export function complianceCommands(store: Store, audit: AuditLog) {
       roles: [...PRINCIPAL],
       input: z.object({}),
       handler: (_i, ctx) =>
-        store.matters
-          .list(ctx.actor.tenantId, (m) => m.status === "closed")
+        visibleMatters(store, ctx)
+          .filter((m) => m.status === "closed")
           .map((m) => {
             const closed = m.closedOn ?? m.openedOn;
             let notBefore = addYears(closed, 7).date;
