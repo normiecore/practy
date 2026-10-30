@@ -1,40 +1,164 @@
+import { mcpAuthRouter, getOAuthProtectedResourceMetadataUrl } from "@modelcontextprotocol/sdk/server/auth/router.js";
+import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import express, { type Request, type Response } from "express";
+import express, { type NextFunction, type Request, type Response } from "express";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { z } from "zod";
+import { settingsFor } from "../admin/settings.js";
+import { PractyOAuthProvider, sessionCookieFrom } from "../auth/mcp-oauth.js";
+import { actorFor, AuthService, SESSION_COOKIE } from "../auth/service.js";
 import { PractyError } from "../core/errors.js";
 import type { Actor, Surface } from "../core/types.js";
 import type { App } from "./app.js";
 import { buildMcpServer } from "./mcp.js";
 
-/**
- * Phase 0 authentication: static bearer tokens per user. Replaced by OAuth 2.1 + PKCE
- * with firm SSO (MCP authorization spec) before any real client data is loaded.
- * A token's surface distinguishes the Practy web app session ("ui") from API keys ("api").
- */
-export interface TokenGrant {
+/** Static tokens for local development and tests only (never with client data). */
+export interface DevTokenGrant {
   actor: Actor;
   surface: Exclude<Surface, "mcp" | "agent">;
 }
 
+export interface HttpOptions {
+  auth: AuthService;
+  baseUrl: string;
+  devTokens?: Map<string, DevTokenGrant>;
+  /** Directory containing the built web app (index.html). */
+  webDir?: string;
+  secureCookies?: boolean;
+}
+
 const STATUS: Record<PractyError["code"], number> = { not_found: 404, forbidden: 403, invalid: 400, conflict: 409 };
 
-export function createHttpServer(app: App, tokens: Map<string, TokenGrant>) {
-  const http = express();
-  http.use(express.json({ limit: "5mb" }));
+const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
-  const auth = (req: Request, res: Response): TokenGrant | undefined => {
-    const token = /^Bearer (.+)$/.exec(req.header("authorization") ?? "")?.[1];
-    const grant = token ? tokens.get(token) : undefined;
-    if (!grant) res.status(401).json({ error: "unauthorized" });
-    return grant;
-  };
+function page(title: string, body: string): string {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title>
+<style>body{font:16px/1.5 system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem;color:#1b1f24}h1{font-size:1.4rem}
+button,a.btn{display:inline-block;font:inherit;padding:.6rem 1rem;border-radius:.4rem;border:1px solid #1d4ed8;background:#1d4ed8;color:#fff;text-decoration:none;margin:.25rem .5rem .25rem 0;cursor:pointer}
+button.secondary{background:#fff;color:#1d4ed8}.muted{color:#57606a}input{font:inherit;padding:.5rem;width:100%;box-sizing:border-box;margin:.5rem 0}</style></head><body>${body}</body></html>`;
+}
+
+export function createHttpServer(app: App, opts: HttpOptions) {
+  const { auth } = opts;
+  const oauth = new PractyOAuthProvider(app.store, auth);
+  const http = express();
+  http.disable("x-powered-by");
+  http.set("trust proxy", 1);
+  http.use((_req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Referrer-Policy", "same-origin");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader(
+      "Content-Security-Policy",
+      "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self' https:; base-uri 'none'",
+    );
+    next();
+  });
+  http.use(express.json({ limit: "25mb" }));
+  http.use(express.urlencoded({ extended: false }));
+
+  const cookie = (token: string, maxAgeS: number) =>
+    `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeS}${opts.secureCookies ? "; Secure" : ""}`;
 
   http.get("/healthz", (_req, res) => {
     res.json({ ok: true });
   });
 
+  // ------------------------------------------------------------ staff sign-in
+  http.get("/auth/providers", (_req, res) => {
+    res.json([...auth.providers.values()].map((p) => ({ id: p.id, label: p.label })));
+  });
+
+  http.get("/auth/login", (req, res) => {
+    const returnTo = String(req.query.returnTo ?? "/");
+    const buttons = [...auth.providers.values()]
+      .map((p) => `<a class="btn" href="/auth/login/${p.id}?returnTo=${encodeURIComponent(returnTo)}">Sign in with ${escapeHtml(p.label)}</a>`)
+      .join("");
+    res.send(page("Sign in · Practy", `<h1>Sign in to Practy</h1><p class="muted">Use your firm account.</p>${buttons}`));
+  });
+
+  http.get("/auth/login/:provider", async (req, res) => {
+    try {
+      res.redirect(302, await auth.beginLogin(String(req.params.provider), String(req.query.returnTo ?? "/")));
+    } catch (err) {
+      res.status(400).send(page("Sign-in error", `<h1>Sign-in error</h1><p>${escapeHtml((err as Error).message)}</p>`));
+    }
+  });
+
+  http.get("/auth/callback/:provider", async (req, res) => {
+    try {
+      const { token, returnTo } = await auth.completeLogin(String(req.params.provider), String(req.query.state ?? ""), String(req.query.code ?? ""));
+      res.setHeader("Set-Cookie", cookie(token, (auth.opts.sessionHours ?? 12) * 3600));
+      res.redirect(302, returnTo);
+    } catch (err) {
+      res.status(403).send(page("Sign-in refused", `<h1>Sign-in refused</h1><p>${escapeHtml((err as Error).message)}</p><a class="btn" href="/auth/login">Try again</a>`));
+    }
+  });
+
+  if (auth.providers.has("dev")) {
+    http.get("/auth/dev", (req, res) => {
+      const state = escapeHtml(String(req.query.state ?? ""));
+      res.send(page("Dev sign-in", `<h1>Development sign-in</h1><p class="muted">Not available in production.</p>
+<form method="get" action="/auth/callback/dev"><input type="hidden" name="state" value="${state}"><label>Email<input name="code" type="email" required autofocus></label><button>Sign in</button></form>`));
+    });
+  }
+
+  http.post("/auth/logout", (req, res) => {
+    auth.endSession(sessionCookieFrom(req.headers.cookie));
+    res.setHeader("Set-Cookie", cookie("", 0));
+    res.json({ ok: true });
+  });
+
+  // ------------------------------------------------------------ API authentication
+  type Resolved = { actor: Actor; surface: Exclude<Surface, "mcp" | "agent"> };
+  const resolve = (req: Request): Resolved | "csrf" | undefined => {
+    const bearer = /^Bearer (.+)$/.exec(req.header("authorization") ?? "")?.[1];
+    if (bearer) {
+      const dev = opts.devTokens?.get(bearer);
+      if (dev) return dev;
+      const user = bearer.startsWith("pk_") ? auth.apiKeyUser(bearer) : undefined;
+      return user ? { actor: actorFor(user), surface: "api" } : undefined;
+    }
+    const s = auth.session(sessionCookieFrom(req.headers.cookie));
+    if (!s) return undefined;
+    if (req.method !== "GET" && req.header("x-practy-csrf") !== s.session.csrf) return "csrf";
+    return { actor: actorFor(s.user), surface: "ui" };
+  };
+  const requireApi = (req: Request, res: Response): Resolved | undefined => {
+    const r = resolve(req);
+    if (r === "csrf") {
+      res.status(403).json({ error: "csrf" });
+      return undefined;
+    }
+    if (!r) res.status(401).json({ error: "unauthorized" });
+    return r;
+  };
+
+  http.get("/api/session", (req, res) => {
+    const s = auth.session(sessionCookieFrom(req.headers.cookie));
+    if (!s) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    res.json({ user: s.user, csrf: s.session.csrf, firmName: settingsFor(app.store, s.user.tenantId).firmName });
+  });
+
+  http.post("/api/keys", async (req, res) => {
+    const r = requireApi(req, res);
+    if (!r) return;
+    if (r.surface !== "ui") {
+      res.status(403).json({ error: "forbidden", message: "API keys are created in the app" });
+      return;
+    }
+    const user = auth.userById(r.actor.userId)!;
+    const key = auth.createApiKey(user, String(req.body?.label ?? "API key"));
+    await app.store.flush();
+    res.json({ key, note: "Shown once. Store it securely." });
+  });
+
   http.get("/api/commands", (req, res) => {
-    if (!auth(req, res)) return;
+    if (!requireApi(req, res)) return;
     res.json(
       app.bus.registry.all().map((d) => ({
         name: d.name,
@@ -48,21 +172,85 @@ export function createHttpServer(app: App, tokens: Map<string, TokenGrant>) {
   });
 
   http.post("/api/commands/:name", async (req, res) => {
-    const grant = auth(req, res);
-    if (!grant) return;
+    const r = requireApi(req, res);
+    if (!r) return;
     try {
-      res.json(await app.bus.execute(String(req.params.name), req.body, { actor: grant.actor, surface: grant.surface }));
+      res.json(await app.bus.execute(String(req.params.name), req.body, r));
     } catch (err) {
       if (err instanceof PractyError) res.status(STATUS[err.code]).json({ error: err.code, message: err.message });
-      else res.status(500).json({ error: "internal" });
+      else {
+        console.error(err);
+        res.status(500).json({ error: "internal", message: "Unexpected error" });
+      }
     }
   });
 
-  // Remote MCP endpoint (Streamable HTTP, stateless): one server instance per request, bound to the caller.
-  http.post("/mcp", async (req, res) => {
-    const grant = auth(req, res);
-    if (!grant) return;
-    const server = buildMcpServer(app.bus, grant.actor);
+  // ------------------------------------------------------------ MCP (OAuth 2.1 for external clients)
+  const issuer = new URL(opts.baseUrl);
+  const mcpUrl = new URL("/mcp", issuer);
+  http.use(mcpAuthRouter({ provider: oauth, issuerUrl: issuer, resourceServerUrl: mcpUrl, scopesSupported: ["practy"], resourceName: "Practy" }));
+
+  http.get("/oauth/consent", (req, res) => {
+    const id = String(req.query.request ?? "");
+    const pending = oauth.pendingRequest(id);
+    if (!pending) {
+      res.status(400).send(page("Expired", "<h1>This request has expired</h1><p>Start the connection again from your AI client.</p>"));
+      return;
+    }
+    const s = auth.session(sessionCookieFrom(req.headers.cookie));
+    if (!s) {
+      res.redirect(302, `/auth/login?returnTo=${encodeURIComponent(req.originalUrl)}`);
+      return;
+    }
+    const enabled = settingsFor(app.store, s.user.tenantId).ai.externalMcpClients;
+    res.send(
+      page(
+        "Connect AI client · Practy",
+        `<h1>Connect ${escapeHtml(pending.clientName)} to Practy?</h1>
+<p>It will act as <strong>${escapeHtml(s.user.displayName)}</strong> (${escapeHtml(s.user.email)}) and can read and draft on matters you can see.
+Legal-risk and trust actions still need approval in Practy. Matter data will be processed by the AI provider under your firm's plan.</p>
+${enabled ? "" : '<p><strong>External AI clients are switched off for your firm.</strong> A principal can enable them in Settings.</p>'}
+<form method="post" action="/oauth/consent"><input type="hidden" name="request" value="${escapeHtml(id)}"><input type="hidden" name="csrf" value="${escapeHtml(s.session.csrf)}">
+<button name="decision" value="approve"${enabled ? "" : " disabled"}>Allow</button><button class="secondary" name="decision" value="deny">Deny</button></form>`,
+      ),
+    );
+  });
+
+  http.post("/oauth/consent", (req, res) => {
+    const raw = sessionCookieFrom(req.headers.cookie);
+    const s = auth.session(raw);
+    if (!s || req.body?.csrf !== s.session.csrf) {
+      res.status(403).send(page("Refused", "<h1>Request refused</h1>"));
+      return;
+    }
+    try {
+      res.redirect(302, oauth.decide(String(req.body.request), raw, req.body.decision === "approve"));
+    } catch (err) {
+      res.status(400).send(page("Error", `<h1>${escapeHtml((err as Error).message)}</h1>`));
+    }
+  });
+
+  const bearer = requireBearerAuth({
+    verifier: {
+      verifyAccessToken: async (token) => {
+        const dev = opts.devTokens?.get(token);
+        if (dev) return { token, clientId: "dev", scopes: ["practy"], extra: { userId: dev.actor.userId, devActor: dev.actor } };
+        return oauth.verifyAccessToken(token);
+      },
+    },
+    resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(mcpUrl),
+  });
+
+  http.post("/mcp", bearer, async (req: Request, res: Response) => {
+    const extra = req.auth?.extra as { userId: string; devActor?: Actor } | undefined;
+    const user = extra && !extra.devActor ? auth.userById(extra.userId) : undefined;
+    const actor = extra?.devActor ?? (user && actorFor(user));
+    if (!actor) {
+      res.status(401).json({ error: "invalid_token" });
+      return;
+    }
+    const maxTier = extra?.devActor ? 3 : settingsFor(app.store, actor.tenantId).ai.externalClientMaxTier;
+    const server = buildMcpServer(app.bus, actor, { maxTier });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on("close", () => {
       void transport.close();
@@ -71,6 +259,23 @@ export function createHttpServer(app: App, tokens: Map<string, TokenGrant>) {
     await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
   });
+  for (const method of ["get", "delete"] as const) {
+    http[method]("/mcp", (_req, res) => {
+      res.status(405).set("Allow", "POST").json({ error: "method_not_allowed" });
+    });
+  }
+
+  // ------------------------------------------------------------ web app
+  if (opts.webDir && existsSync(join(opts.webDir, "index.html"))) {
+    http.use(express.static(opts.webDir, { index: false, maxAge: "1h" }));
+    http.get(/^\/(?!api\/|auth\/|oauth\/|mcp|\.well-known\/).*/, (req: Request, res: Response, next: NextFunction) => {
+      if (!auth.session(sessionCookieFrom(req.headers.cookie))) {
+        res.redirect(302, `/auth/login?returnTo=${encodeURIComponent(req.originalUrl)}`);
+        return;
+      }
+      res.sendFile(join(opts.webDir!, "index.html"), (err) => err && next(err));
+    });
+  }
 
   return http;
 }

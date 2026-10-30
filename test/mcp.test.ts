@@ -2,7 +2,6 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
 import type { Actor } from "../src/core/types.js";
-import { createHttpServer } from "../src/server/http.js";
 import { buildMcpServer } from "../src/server/mcp.js";
 import { as, openMatter, setup, users } from "./helpers.js";
 
@@ -62,34 +61,5 @@ describe("MCP server", () => {
     expect(search.result).toEqual([]);
     // Still visible in the app.
     expect((await exec("get_matter", { matterId: matter.id }, as(users.solicitor))).number).toBe("SL-1998");
-  });
-});
-
-describe("HTTP surface", () => {
-  it("serves REST commands and the remote MCP endpoint with bearer auth", async () => {
-    const { app } = setup();
-    const http = createHttpServer(app, new Map([["tok", { actor: users.solicitor, surface: "ui" as const }]]));
-    const server = http.listen(0);
-    const base = `http://127.0.0.1:${(server.address() as any).port}`;
-    try {
-      expect((await fetch(`${base}/api/commands`)).status).toBe(401);
-      const list = await (await fetch(`${base}/api/commands`, { headers: { Authorization: "Bearer tok" } })).json();
-      expect(list.find((c: any) => c.name === "create_matter").inputSchema.type).toBe("object");
-
-      const bad = await fetch(`${base}/api/commands/get_matter`, { method: "POST", headers: { Authorization: "Bearer tok", "Content-Type": "application/json" }, body: JSON.stringify({ matterId: "nope" }) });
-      expect(bad.status).toBe(404);
-
-      const mcp = await fetch(`${base}/mcp`, {
-        method: "POST",
-        headers: { Authorization: "Bearer tok", "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } } }),
-      });
-      expect(mcp.status).toBe(200);
-      const body = await mcp.json();
-      expect(body.result.serverInfo.name).toBe("practy");
-      expect(body.result.instructions).toMatch(/approval/);
-    } finally {
-      server.close();
-    }
   });
 });

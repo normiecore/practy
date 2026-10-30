@@ -19,10 +19,11 @@ Do not draft the substance of affidavits, witness statements or expert evidence.
 Money amounts are integer cents.`;
 
 /** Builds an MCP server bound to one authenticated actor. Every tool runs through the same CommandBus as the UI and REST API. */
-export function buildMcpServer(bus: CommandBus, actor: Actor): McpServer {
+export function buildMcpServer(bus: CommandBus, actor: Actor, opts: { maxTier?: number } = {}): McpServer {
   const server = new McpServer({ name: "practy", version: "0.1.0" }, { instructions: SERVER_INSTRUCTIONS });
+  const maxTier = opts.maxTier ?? 3;
   for (const def of bus.registry.all()) {
-    if (def.humanOnly) continue;
+    if (def.humanOnly || def.tier > maxTier) continue;
     server.registerTool(
       def.name,
       {
