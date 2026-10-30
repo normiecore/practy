@@ -66,6 +66,27 @@ export async function run<T = any>(name: string, input: unknown = {}): Promise<T
   return out.result;
 }
 
+export interface CommandInfo {
+  name: string;
+  title: string;
+  description: string;
+  tier: 0 | 1 | 2 | 3;
+  humanOnly: boolean;
+  inputSchema: any;
+}
+
+let commandList: Promise<CommandInfo[]> | undefined;
+
+/** The command catalogue with JSON Schema inputs, fetched once per page load. */
+export function listCommands(): Promise<CommandInfo[]> {
+  commandList ??= fetch("/api/commands", { credentials: "same-origin" }).then((r) => {
+    if (!r.ok) throw new ApiError("commands", "Could not load commands", r.status);
+    return r.json() as Promise<CommandInfo[]>;
+  });
+  commandList.catch(() => (commandList = undefined));
+  return commandList;
+}
+
 export async function startChat(matterId?: string): Promise<string> {
   const res = await post("/api/chat", { matterId });
   if (!res.ok) throw new ApiError("chat", "Could not start a conversation", res.status);

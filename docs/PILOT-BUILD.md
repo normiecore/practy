@@ -2,7 +2,7 @@
 
 *This is the living plan. Update the status column in the same commit as the work, so anyone picking up (another account, another session) can continue from GitHub alone.*
 
-**Working branch:** `research/strategy-and-compliance`
+**Working branch:** `claude/upbeat-edison-fszgfn` (continues `research/strategy-and-compliance`)
 **Pilot:** Soul Legal (Perth/Baldivis). ICWA motor vehicle and WorkCover WA matters. Box stays the document store. Xero (or a trust add-on) stays the trust record during the shadow phase.
 
 ## Firm context discovered (from Soul Legal's existing Claude skills)
@@ -54,7 +54,7 @@ Firm templates (the Authority to Settle form and the letterhead) are **tenant as
 | 11 | Email filing pipeline: matching rules (matter number plus surname, thread history, party addresses), review queue, misc archive; a mode that drives the existing Apps Script through labels | ✅ done | `src/filing`; scheduled sweep wiring pending (#15) |
 | 12 | AI: model gateway (Anthropic API and Bedrock Sydney), in-app chat agent over the command registry, medical chronology with verified page citations, AI policy and consent | ✅ done | `src/ai`; chat streams over SSE at `/api/chat/:id/messages`; model id is configuration (`PRACTY_AI_MODEL`) |
 | 13 | Compliance: privacy requests (APP 12/13), breach register (NDB 30-day and ransomware 72-hour timers), ADM register and privacy-policy clause, AML intake screening, evidence-document flag, retention and legal hold, AI-use log export | ✅ done | `src/compliance` |
-| 14 | Web app (React): matters, matter workspace, approvals inbox, diary, filing review, documents, chronology, damages, settlement, trust, compliance, settings, chat | 🚧 in progress | parallel agent on branch `pilot/web`; scaffold, API client and design tokens on this branch |
+| 14 | Web app (React): matters, matter workspace, approvals inbox, diary, filing review, documents, chronology, damages, settlement, trust, compliance, settings, chat | ✅ first version | `web/`. Hash routing; every screen calls the command API. `web/command-form.tsx` renders any command from its JSON Schema, so every command is usable in the app (matter "All actions" tab, "All commands" page) before it gets a bespoke screen. Smoke-tested in Chromium; no automated UI tests yet. `pilot/web` was never pushed, so this replaces it |
 | 15 | Deploy: Dockerfile, docker-compose, AWS ap-southeast-2 guide, backups, onboarding runbook | ✅ done | `Dockerfile`, `docker-compose.yml`, `docs/DEPLOY.md`, `docs/ONBOARDING.md`; CI builds the image |
 
 ## Pilot onboarding inputs needed from Soul Legal (not in repo)
@@ -77,9 +77,11 @@ Firm templates (the Authority to Settle form and the letterhead) are **tenant as
 ## Handover notes (keep current)
 - **Run locally:** see README → Development. Tests: `npm run check`. Include the Postgres test with `TEST_DATABASE_URL=postgres://…`.
 - **How to add a capability:** write a `defineCommand` in the module's `commands.ts`, register it in `src/server/app.ts`, and add a test. It then appears automatically in REST, MCP and the assistant.
-- **Branches:** `pilot/connectors`, `pilot/docgen` and `pilot/damages-costs` are merged here. `pilot/web` merges when done.
+- **Branches:** `pilot/connectors`, `pilot/docgen` and `pilot/damages-costs` are merged here. The web app was built on this branch.
+- **Web app next steps:** bespoke forms for damages and Authority to Settle (they use the generated form today); a stored-authority read command so the Settlement tab can show the last computed version after a reload; Playwright smoke tests in CI.
+- **Known gap:** `confirm_key_date` with an unknown key date id still creates an approval (no precheck before approval, unlike `send_email`).
 - **Remaining before go-live:**
-  - the web app (#14);
+  - the web app (#14): review with the firm, then the next steps above;
   - an independent security review, with fixes;
   - a real-account trial of each connector (Box CCG, Gmail, Xero sandbox, PracticePanther);
   - verifying the rules on the register (STRATEGY §9);

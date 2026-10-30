@@ -142,3 +142,8 @@ label.check input { width: auto; }
   .main { padding: 1rem; }
   .chat { position: fixed; inset: 0; width: auto; z-index: 25; }
 }
+
+a.card { color: inherit; display: block; }
+a.card:hover { text-decoration: none; border-color: var(--accent); }
+fieldset.card legend { font-weight: 600; font-size: 0.85rem; padding: 0 0.3rem; }
+.modal fieldset.card { box-shadow: none; }
