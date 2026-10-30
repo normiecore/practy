@@ -163,12 +163,7 @@ describe("trust controls", () => {
     expect(second.status).toBe("executed");
     expect((await exec("get_trust_balance", { matterId: matter.id }, as(users.solicitor))).available).toBe(200_000);
 
-    // A further payment beyond the remaining available balance fails at execution.
-    const over = await run("prepare_trust_payment", { matterId: matter.id, payee: "Toni Priestley", amountCents: 300_000, purpose: "Extra" }, as(users.solicitor));
-    if (over.status !== "pending_approval") throw new Error("expected approval");
-    await exec("decide_approval", { approvalId: over.approvalId, decision: "approve" }, as(users.principal));
-    const blocked = await exec("decide_approval", { approvalId: over.approvalId, decision: "approve" }, as(users.accounts));
-    expect(blocked.status).toBe("failed");
-    expect(blocked.error).toMatch(/may not go into debit/);
+    // A further payment beyond the remaining available balance is refused when requested.
+    await expect(run("prepare_trust_payment", { matterId: matter.id, payee: "Toni Priestley", amountCents: 300_000, purpose: "Extra" }, as(users.solicitor))).rejects.toMatchObject({ code: "conflict" });
   });
 });

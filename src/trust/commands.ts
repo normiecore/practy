@@ -226,6 +226,11 @@ export function trustCommands(store: Store, trust: TrustService) {
         purpose: z.string().min(1),
       }),
       matterIds: (i) => [i.matterId],
+      precheck: async ({ matterId, amountCents }, ctx) => {
+        const ref = matterRefFor(store, ctx, matterId);
+        const available = await trust.availableBalance(ctx.actor.tenantId, ref);
+        if (amountCents > available) throw conflict(`Payment of ${amountCents}c exceeds the available trust balance of ${available}c on ${ref}; a client ledger may not go into debit`);
+      },
       handler: async ({ matterId, payee, amountCents, purpose }, ctx) => {
         const ref = matterRefFor(store, ctx, matterId);
         const available = await trust.availableBalance(ctx.actor.tenantId, ref);
