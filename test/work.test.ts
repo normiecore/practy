@@ -26,4 +26,17 @@ describe("tasks, file notes and evidence requests", () => {
     expect(await exec<any[]>("list_tasks", {}, as(users.paralegal))).toHaveLength(0);
     await expect(exec("update_task", { taskId: t.id, status: "done" }, as(users.paralegal))).rejects.toMatchObject({ code: "not_found" });
   });
+
+  it("keeps walled and no-AI matters' tasks out of the daily digest", async () => {
+    const { exec, app } = setup();
+    const { matter: walled } = await openMatter(exec);
+    const { matter: noAi } = await openMatter(exec, { number: "SL-2001", title: "Citizen v Insurer", client: { name: "John Citizen" }, aiPermitted: false });
+    await exec("create_task", { matterId: walled.id, title: "Walled task", assigneeId: users.paralegal.userId, dueOn: "2026-10-01" }, as(users.solicitor));
+    await exec("create_task", { matterId: noAi.id, title: "No-AI task", assigneeId: users.paralegal.userId, dueOn: "2026-10-01" }, as(users.solicitor));
+    await exec("create_task", { title: "Firm task", assigneeId: users.paralegal.userId, dueOn: "2026-10-01" }, as(users.solicitor));
+    app.store.matters.get(walled.id)!.restrictedTo = [users.solicitor.userId];
+    const titles = async (surface: "ui" | "mcp") => (await exec("daily_digest", {}, as(users.paralegal, surface))).tasksDue.map((t: any) => t.title).sort();
+    expect(await titles("ui")).toEqual(["Firm task", "No-AI task"]);
+    expect(await titles("mcp")).toEqual(["Firm task"]);
+  });
 });

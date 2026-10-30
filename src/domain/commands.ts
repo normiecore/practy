@@ -49,7 +49,8 @@ interface ConflictHit {
 }
 
 function conflictSearch(store: Store, ctx: InvocationContext, names: string[], excludeMatterId?: string): ConflictHit[] {
-  const visible = new Set(visibleMatters(store, { ...ctx, surface: "ui" }).map((m) => m.id));
+  // Hits on walled matters, and on no-AI matters from an AI surface, are reported without details.
+  const visible = new Set(visibleMatters(store, ctx).map((m) => m.id));
   const hits: ConflictHit[] = [];
   for (const m of store.mattersFor(ctx.actor.tenantId)) {
     if (m.id === excludeMatterId) continue;

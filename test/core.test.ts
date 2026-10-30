@@ -56,6 +56,14 @@ describe("command bus policy", () => {
     expect(visible[0].matter.number).toBe("SL-1998");
   });
 
+  it("reports no-AI matters in conflict searches on AI surfaces without details", async () => {
+    const { exec } = setup();
+    await openMatter(exec, { aiPermitted: false });
+    const [hit] = await exec<any[]>("conflict_search", { names: ["Toni Priestley"] }, as(users.solicitor, "mcp"));
+    expect(hit).toMatchObject({ matter: null, partyName: "[restricted]", role: "client" });
+    expect((await exec<any[]>("conflict_search", { names: ["Toni Priestley"] }, as(users.solicitor)))[0].matter.number).toBe("SL-1998");
+  });
+
   it("routes tier 2 to a practitioner approval and executes on approval", async () => {
     const { app, run, exec } = setup();
     const { keyDates, matter } = await openMatter(exec);
