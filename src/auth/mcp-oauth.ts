@@ -3,7 +3,7 @@ import type { Response } from "express";
 import type { OAuthRegisteredClientsStore } from "@modelcontextprotocol/sdk/server/auth/clients.js";
 import type { AuthorizationParams, OAuthServerProvider } from "@modelcontextprotocol/sdk/server/auth/provider.js";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
-import { InvalidGrantError, InvalidTokenError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
+import { InvalidClientMetadataError, InvalidGrantError, InvalidTokenError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import type { OAuthClientInformationFull, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { settingsFor } from "../admin/settings.js";
 import type { Store } from "../domain/store.js";
@@ -58,6 +58,28 @@ interface IssuedToken {
 /** Clients register globally (pre-login); the tenant is fixed when a user consents. */
 const GLOBAL = "_global";
 
+const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
+/** Redirect hosts of the AI clients we know. Anything else is shown as unverified on the consent screen. */
+const KNOWN_REDIRECT_HOSTS = new Set(["claude.ai", "claude.com"]);
+
+/** Registration accepts only https redirect URIs, or http on a loopback host (native clients). */
+function allowedRedirectUri(uri: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(uri);
+  } catch {
+    return false;
+  }
+  return u.protocol === "https:" || (u.protocol === "http:" && LOOPBACK.has(u.hostname));
+}
+
+export interface ConsentRequest extends PendingAuthorization {
+  clientName: string;
+  /** Where the authorization code will be sent. Shown on the consent screen so a look-alike client is visible. */
+  redirectHost: string;
+  verified: boolean;
+}
+
 export class PractyOAuthProvider implements OAuthServerProvider {
   readonly pending = new Map<string, PendingAuthorization>();
   private readonly clients;
@@ -83,6 +105,8 @@ export class PractyOAuthProvider implements OAuthServerProvider {
       },
       registerClient: (client) => {
         const full = client as OAuthClientInformationFull;
+        const bad = (full.redirect_uris ?? []).find((u) => !allowedRedirectUri(String(u)));
+        if (bad !== undefined) throw new InvalidClientMetadataError("redirect_uris must use https, or http on a loopback host");
         const clientId = full.client_id ?? randomUUID();
         this.clients.set({ ...full, client_id: clientId, id: clientId, tenantId: GLOBAL });
         void this.store.flush();
@@ -104,10 +128,16 @@ export class PractyOAuthProvider implements OAuthServerProvider {
     res.redirect(302, `/oauth/consent?request=${id}`);
   }
 
-  pendingRequest(id: string): (PendingAuthorization & { clientName: string }) | undefined {
+  pendingRequest(id: string): ConsentRequest | undefined {
     const p = this.pending.get(id);
     if (!p || p.expiresAt < Date.now()) return undefined;
-    return { ...p, clientName: this.clients.get(p.clientId)?.client_name ?? p.clientId };
+    const { host, hostname } = new URL(p.params.redirectUri);
+    return {
+      ...p,
+      clientName: this.clients.get(p.clientId)?.client_name ?? p.clientId,
+      redirectHost: host,
+      verified: KNOWN_REDIRECT_HOSTS.has(hostname) || LOOPBACK.has(hostname),
+    };
   }
 
   /** Called from the consent form. Returns the redirect URL for the client. */
