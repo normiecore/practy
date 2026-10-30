@@ -110,7 +110,7 @@ export interface MailQuery {
   since?: string;
   /** Provider-native query (Gmail search syntax / Graph $search). */
   q?: string;
-  /** Gmail label name or Outlook folder name. */
+  /** Gmail label name or Outlook category (labels map to categories, as in addLabel). */
   label?: string;
   max?: number;
 }
