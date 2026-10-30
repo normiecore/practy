@@ -330,9 +330,16 @@ export function complianceCommands(store: Store, audit: AuditLog) {
       handler: ({ matterId, documentId, reason }, ctx) => {
         const d = documentsOf(store).find(ctx.actor.tenantId, documentId);
         if (!d || d.matterId !== matterId) throw notFound("Document");
-        // Copies already compiled or converted from it (court books, markup copies) are excluded too.
-        const all = documentsOf(store).list(ctx.actor.tenantId, (x) => x.matterId === matterId);
+        // Copies already compiled or converted from it (court books, markup copies) are excluded too,
+        // and so are files with the same content anywhere in the firm (the same email filed to several matters).
+        const all = documentsOf(store).list(ctx.actor.tenantId);
         const excluded = new Set([d.id]);
+        const sameContent = (x: { sha1?: string; emailMessageId?: string; name: string }) =>
+          (!!d.sha1 && x.sha1 === d.sha1) || (!!d.emailMessageId && x.emailMessageId === d.emailMessageId && x.name === d.name);
+        for (const x of documentsOf(store).list(ctx.actor.tenantId, (x) => x.id !== d.id && sameContent(x))) {
+          excluded.add(x.id);
+          if (!x.aiExcluded) documentsOf(store).set({ ...x, aiExcluded: true, aiExcludedReason: `same content as ${d.name}: ${reason}` });
+        }
         for (let grew = true; grew; ) {
           grew = false;
           for (const x of all) {

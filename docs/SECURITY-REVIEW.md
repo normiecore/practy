@@ -28,7 +28,9 @@ Each fix has a test that fails without it. A second reviewer re-ran the original
 - re-filing excluded email content to another matter;
 - the assistant vouching for a sender by filing their email;
 - matters that reach an assistant conversation through list results;
-- closing a privacy request on a hidden matter.
+- closing a privacy request on a hidden matter;
+- copies of excluded content in other matters, whether filed before the exclusion or indexed from Box after the firm's own automation filed them;
+- matters named only in conflict hits or by number in trust records, reaching an assistant conversation.
 
 ## Behaviour changes to know about
 - **Matter numbers** are trimmed and must match `^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$`. Numbers with spaces, `/` or ` - ` are refused on creation and skipped on import. PracticePanther numbers such as `1998` and the `SL-2001` style are unaffected. If a firm uses a format like `2024/001`, the pattern needs widening (not the folder matching, which must stay exact).

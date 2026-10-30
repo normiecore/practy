@@ -9,7 +9,7 @@ import { matterGuard, visibleMatters } from "../domain/commands.js";
 import type { Matter } from "../domain/model.js";
 import type { Store } from "../domain/store.js";
 import { matterFolderId } from "../documents/folders.js";
-import { documentsOf, type MatterDocument } from "../documents/model.js";
+import { documentsOf, excludedTwin, type MatterDocument } from "../documents/model.js";
 import type { IntegrationHub } from "../integrations/hub.js";
 import { DEFAULT_MISC, matchEmail, normaliseActionNumber, type MatchDecision, type MatterIndexEntry } from "./matcher.js";
 import { attachmentName, emailBaseName } from "./naming.js";
@@ -205,10 +205,7 @@ export class FilingService {
       if (stored.duplicate) duplicates++;
       if (f.kind === "eml") continue;
       // Re-filing must not launder an AI exclusion: a copy of excluded content stays excluded.
-      const excluded = documentsOf(this.store).list(
-        actor.tenantId,
-        (d) => !!d.aiExcluded && ((!!stored.file.sha1 && d.sha1 === stored.file.sha1) || (d.emailMessageId === item.messageId && d.name === stored.file.name)),
-      )[0];
+      const excluded = excludedTwin(this.store, actor.tenantId, { sha1: stored.file.sha1, emailMessageId: item.messageId, name: stored.file.name });
       const doc: MatterDocument = documentsOf(this.store).set({
         id: randomUUID(), tenantId: actor.tenantId, matterId, store: docs.kind, storeFileId: stored.file.id, folderId: folder,
         name: stored.file.name, contentType: f.type, size: f.bytes.length, sha1: stored.file.sha1, docDate: message.date.slice(0, 10),

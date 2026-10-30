@@ -166,6 +166,18 @@ describe("filing respects walls and AI consent", () => {
     expect(copies.every((d) => d.aiExcluded && d.derivedFrom?.length)).toBe(true);
   });
 
+  it("excludes copies of the same content already filed to other matters", async () => {
+    const { app, m1998, m2003 } = await setupFiling("practy");
+    await app.bus.execute("run_mail_sweep", since, as(users.solicitor));
+    const filed = app.filing.items.list(TENANT, (i) => i.matterId === m1998 && i.status === "filed" && !!i.documentIds?.length)[0]!;
+    const refiled = (await app.bus.execute("file_email", { itemId: filed.id, matterId: m2003 }, as(users.solicitor))) as any;
+    // Excluded only after both copies exist.
+    for (const id of filed.documentIds!) await app.bus.execute("restrict_document_ai", { matterId: m1998, documentId: id, reason: "privileged" }, as(users.solicitor));
+    const copies = documentsOf(app.store).list(TENANT, (d) => refiled.result.documentIds.includes(d.id));
+    expect(copies.length).toBeGreaterThan(0);
+    expect(copies.every((d) => d.aiExcluded)).toBe(true);
+  });
+
   it("hides queue items tied to no-AI matters from AI surfaces", async () => {
     const { app, m2003 } = await setupFiling("practy");
     patch(app, m2003, { aiPermitted: false });

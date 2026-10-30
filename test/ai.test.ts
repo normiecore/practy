@@ -109,6 +109,18 @@ describe("in-app assistant", () => {
     await expect(app.agent.send(users.solicitor, c.id, "and again", () => {})).rejects.toMatchObject({ code: "forbidden" });
   });
 
+  it("tracks matters named only in conflict hits", async () => {
+    const tool = (id: string, name: string, input: object) => msg([{ type: "tool_use", id, name, input } as B.BetaToolUseBlock], "tool_use");
+    const text = (t: string) => msg([{ type: "text", text: t } as B.BetaTextBlock], "end_turn");
+    const app = createApp({ chatModel: () => model });
+    const res = (await app.bus.execute("create_matter", { number: "3201", title: "Conflict hit", scheme: "icwa_mva", injuryDate: "2026-01-01", client: { name: "Pat Example" } }, as(users.solicitor))) as any;
+    const hit = res.result.matter.id as string;
+    const model: ScriptedModel = new ScriptedModel([tool("t1", "conflict_search", { names: ["Pat Example"] }), text("One hit.")]);
+    const c = app.agent.start(users.solicitor);
+    await app.agent.send(users.solicitor, c.id, "conflict check Pat Example", () => {});
+    expect(app.agent.get(users.solicitor, c.id).matterIds).toContain(hit);
+  });
+
   it("produces valid JSON-schema tool definitions for every command", () => {
     const app = createApp({ chatModel: () => new ScriptedModel() });
     for (const t of toolsFor(app.bus) as B.BetaTool[]) {

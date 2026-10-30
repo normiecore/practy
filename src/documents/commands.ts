@@ -21,7 +21,7 @@ import type { Store } from "../domain/store.js";
 import { clientSortName } from "../filing/service.js";
 import type { IntegrationHub } from "../integrations/hub.js";
 import { matterFolderId } from "./folders.js";
-import { documentsOf, type MatterDocument } from "./model.js";
+import { documentsOf, excludedTwin, type MatterDocument } from "./model.js";
 
 export interface Template {
   id: string;
@@ -170,11 +170,13 @@ export function documentCommands(store: Store, hub: IntegrationHub) {
           for (const f of files) {
             if (known.has(f.id)) continue;
             const date = /^(\d{4})\.(\d{2})\.(\d{2})/.exec(f.name);
+            const excluded = excludedTwin(store, ctx.actor.tenantId, { sha1: f.sha1 });
             docs.set({
               id: randomUUID(), tenantId: ctx.actor.tenantId, matterId, store: ds.kind, storeFileId: f.id, folderId, name: f.name,
               contentType: f.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : f.name.toLowerCase().endsWith(".docx") ? DOCX : "application/octet-stream",
               size: f.size, sha1: f.sha1, docDate: date ? `${date[1]}-${date[2]}-${date[3]}` : undefined, category: path || undefined, source: "import",
               createdAt: new Date().toISOString(), createdBy: ctx.actor.userId,
+              ...(excluded ? { aiExcluded: true, aiExcludedReason: excluded.aiExcludedReason, derivedFrom: [excluded.id] } : {}),
             });
             added++;
           }

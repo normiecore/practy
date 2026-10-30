@@ -172,7 +172,13 @@ export class AgentService {
       ...(parsed?.success ? (def!.matterIds?.(parsed.data) ?? []) : []),
       ...(out.status === "executed" ? (def?.resultMatterIds?.(out.result) ?? []) : []),
       // Lists (search, digest, approvals, conflicts) span many matters without declaring them.
-      ...(out.status === "executed" ? matterRefs(out.result).filter((id) => this.store.matters.find(c.tenantId, id)) : []),
+      ...(out.status === "executed"
+        ? matterRefs(out.result).flatMap((ref) => {
+            if (ref.kind === "id") return this.store.matters.find(c.tenantId, ref.value) ? [ref.value] : [];
+            const m = this.store.matterByNumber(c.tenantId, ref.value);
+            return m ? [m.id] : [];
+          })
+        : []),
     ];
     if (ids.length) c.matterIds = [...new Set([...(c.matterIds ?? []), ...ids])];
   }
@@ -183,14 +189,18 @@ export class AgentService {
   }
 }
 
-/** Every matter id a result mentions: matterId/matterIds fields, and records shaped like a matter. */
-export function matterRefs(value: unknown, out: string[] = []): string[] {
+/**
+ * Every matter a result mentions: matterId/matterIds fields, records shaped like a matter (id and
+ * number, as in search results and conflict hits), and trust records' matterRef (a matter number).
+ */
+export function matterRefs(value: unknown, out: { kind: "id" | "number"; value: string }[] = []): { kind: "id" | "number"; value: string }[] {
   if (Array.isArray(value)) value.forEach((v) => matterRefs(v, out));
   else if (value && typeof value === "object") {
     const o = value as Record<string, unknown>;
-    if (typeof o.matterId === "string") out.push(o.matterId);
-    if (Array.isArray(o.matterIds)) out.push(...o.matterIds.filter((x): x is string => typeof x === "string"));
-    if (typeof o.id === "string" && typeof o.number === "string" && typeof o.scheme === "string") out.push(o.id);
+    if (typeof o.matterId === "string") out.push({ kind: "id", value: o.matterId });
+    if (Array.isArray(o.matterIds)) for (const x of o.matterIds) if (typeof x === "string") out.push({ kind: "id", value: x });
+    if (typeof o.id === "string" && typeof o.number === "string") out.push({ kind: "id", value: o.id });
+    if (typeof o.matterRef === "string") out.push({ kind: "number", value: o.matterRef });
     Object.values(o).forEach((v) => matterRefs(v, out));
   }
   return out;

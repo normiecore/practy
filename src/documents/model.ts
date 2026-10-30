@@ -33,3 +33,17 @@ export interface MatterDocument {
 
 export const documentsOf = (store: { collection<T extends { id: string; tenantId: string }>(k: string): import("../core/collection.js").Collection<T> }) =>
   store.collection<MatterDocument>("document");
+
+/**
+ * An AI-excluded document with the same content, anywhere in the firm. Copies of excluded content
+ * (re-filed email, files a firm's own automation put in another matter's folder) stay excluded.
+ */
+export const excludedTwin = (
+  store: Parameters<typeof documentsOf>[0],
+  tenantId: string,
+  f: { sha1?: string; emailMessageId?: string; name?: string },
+): MatterDocument | undefined =>
+  documentsOf(store).list(
+    tenantId,
+    (d) => !!d.aiExcluded && ((!!f.sha1 && d.sha1 === f.sha1) || (!!f.emailMessageId && d.emailMessageId === f.emailMessageId && d.name === f.name)),
+  )[0];

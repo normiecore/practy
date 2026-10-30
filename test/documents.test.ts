@@ -88,6 +88,22 @@ describe("document workflow", () => {
     expect(TENANT).toBe("t-soul");
   });
 
+  it("indexes a copy of excluded content found in another matter's folder as excluded", async () => {
+    const { app, exec, matter, store } = await setup();
+    const original = await exec("upload_document", { matterId: matter.id, name: "2026.01.01 Privileged advice.pdf", base64: b64(await pdf("Privileged")), contentType: "application/pdf" });
+    await exec("restrict_document_ai", { matterId: matter.id, documentId: original.id, reason: "privileged" });
+    // The Box fake does not hash files; give the original the hash Box would report.
+    const docs = app.store.collection<any>("document");
+    docs.set({ ...docs.get(original.id), sha1: "same-bytes" });
+    const { matter: other } = await exec("create_matter", { number: "2004", title: "Other v ICWA", scheme: "icwa_mva", injuryDate: "2025-03-14", client: { name: "Sam Other" } });
+    const folder = await store.ensureMatterFolder({ number: "2004", clientSortName: "Other, Sam", schemeLabel: "MVA" });
+    // The firm's own automation drops a copy into the other matter's folder.
+    store.files.set("copy", { ref: { id: "copy", name: "2026.01.01 Advice.pdf", folderId: folder.id, size: 10, modifiedAt: "2026-10-30T00:00:00Z", sha1: "same-bytes" }, bytes: new Uint8Array(10) });
+    expect((await exec("sync_matter_documents", { matterId: other.id })).added).toBe(1);
+    const copy = (await exec("list_documents", { matterId: other.id }))[0];
+    expect(copy).toMatchObject({ aiExcluded: true, derivedFrom: [original.id] });
+  });
+
   it("carries AI exclusion and evidence flags onto court books and markup copies", async () => {
     const { exec, matter } = await setup();
     const up = (name: string, bytes: Uint8Array, contentType: string) => exec("upload_document", { matterId: matter.id, name, base64: b64(bytes), contentType });
