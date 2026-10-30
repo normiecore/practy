@@ -25,6 +25,8 @@ export interface CommandDef<I extends z.ZodObject = z.ZodObject, O = unknown> {
   resultMatterIds?: (result: any) => string[]; // annotate the parameter where the command is defined
   /** Runs before an approval request is created (and again at execution via the handler): reject doomed requests early. */
   precheck?: (input: z.infer<I>, ctx: InvocationContext) => void | Promise<void>;
+  /** Tier 2/3: detail stored on the approval request for the approver (e.g. attachment names behind ids). */
+  describe?: (input: z.infer<I>, ctx: InvocationContext) => Record<string, unknown> | Promise<Record<string, unknown>>;
   handler: (input: z.infer<I>, ctx: InvocationContext) => O | Promise<O>;
 }
 

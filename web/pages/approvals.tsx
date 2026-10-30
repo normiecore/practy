@@ -7,6 +7,7 @@ interface Approval {
   command: string;
   tier: 2 | 3;
   input: Record<string, unknown>;
+  context?: Record<string, unknown>;
   matterIds: string[];
   requestedBy: string;
   requestedVia: string;
@@ -81,6 +82,11 @@ export function Approvals() {
                     <div style={{ marginTop: "0.75rem" }}>
                       <Value value={a.input} />
                     </div>
+                    {a.context && (
+                      <div style={{ marginTop: "0.5rem" }}>
+                        <Value value={a.context} />
+                      </div>
+                    )}
                     {a.decisions.length > 0 && (
                       <p className="small">
                         {a.decisions.map((d) => `${who(d.userId)} ${d.decision === "approve" ? "approved" : "rejected"}${d.note ? `: ${d.note}` : ""}`).join("; ")}

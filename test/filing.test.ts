@@ -115,3 +115,70 @@ describe("filing service", () => {
     expect(docs.namesIn("Emails").some((n) => n.includes("EM to dr@clinic.com.au re Request for report"))).toBe(true);
   });
 });
+
+describe("filing respects walls and AI consent", () => {
+  const since = { since: "2026-10-01T00:00:00Z" };
+  const patch = (app: Awaited<ReturnType<typeof setupFiling>>["app"], matterId: string, p: Record<string, unknown>) =>
+    app.store.matters.set({ ...app.store.matters.get(matterId)!, ...p });
+
+  it("never matches, reveals or files into a matter the mailbox owner is walled from", async () => {
+    const { app, docs, m2003 } = await setupFiling("practy");
+    patch(app, m2003, { restrictedTo: [users.principal.userId] });
+    const run = (await app.bus.execute("run_mail_sweep", since, as(users.solicitor))) as any;
+    // d ("Appointment for Mr Nguyen") no longer resolves to the walled Nguyen matter.
+    expect(run.result).toMatchObject({ filed: 2 });
+    expect(documentsOf(app.store).list(TENANT, (d) => d.matterId === m2003)).toHaveLength(0);
+    expect(docs.namesIn("Emails").some((n) => n.includes("Nguyen"))).toBe(false);
+    for (const status of ["review", "filed", "misc"]) {
+      const items = ((await app.bus.execute("list_filing_queue", { status }, as(users.solicitor))) as any).result;
+      expect(JSON.stringify(items)).not.toContain(m2003);
+      expect(JSON.stringify(items.map((i: any) => i.evidence))).not.toContain("nguyen");
+    }
+    // The service itself refuses, whichever path reaches it.
+    const item = app.filing.items.list(TENANT, (i) => i.messageId === "d")[0]!;
+    await expect(app.filing.file(users.solicitor, item, m2003)).rejects.toMatchObject({ code: "not_found" });
+    expect(documentsOf(app.store).list(TENANT, (d) => d.matterId === m2003)).toHaveLength(0);
+  });
+
+  it("hides queue items tied to no-AI matters from AI surfaces", async () => {
+    const { app, m2003 } = await setupFiling("practy");
+    patch(app, m2003, { aiPermitted: false });
+    await app.bus.execute("run_mail_sweep", since, as(users.solicitor));
+    const ui = ((await app.bus.execute("list_filing_queue", { status: "filed" }, as(users.solicitor))) as any).result;
+    expect(ui.some((i: any) => i.matterId === m2003)).toBe(true);
+    for (const status of ["review", "filed"]) {
+      const ai = ((await app.bus.execute("list_filing_queue", { status }, as(users.solicitor, "agent"))) as any).result;
+      expect(JSON.stringify(ai)).not.toContain(m2003);
+      expect(ai.some((i: any) => i.subject.includes("Nguyen"))).toBe(false);
+    }
+  });
+});
+
+describe("send_email recipients and approval detail", () => {
+  const since = { since: "2026-10-01T00:00:00Z" };
+
+  it("does not treat an auto-filed sender as a correspondent until a person files their mail", async () => {
+    const { app, m1998, m2003 } = await setupFiling("practy");
+    await app.bus.execute("run_mail_sweep", since, as(users.solicitor));
+    // reception@clinic.com.au reached m1998 only through automatic filing.
+    await expect(app.bus.execute("send_email", { matterId: m1998, to: ["reception@clinic.com.au"], subject: "x", body: "y" }, as(users.solicitor, "agent"))).rejects.toMatchObject({ code: "invalid" });
+    const queue = ((await app.bus.execute("list_filing_queue", {}, as(users.solicitor))) as any).result;
+    await app.bus.execute("file_email", { itemId: queue[0].id, matterId: m2003 }, as(users.solicitor));
+    const req = (await app.bus.execute("send_email", { matterId: m2003, to: ["physio@spark.com.au"], subject: "x", body: "y" }, as(users.solicitor, "agent"))) as any;
+    expect(req.status).toBe("pending_approval");
+  });
+
+  it("shows the approver attachment names and rejects attachments from another matter up front", async () => {
+    const { app, m1998, m2003 } = await setupFiling("practy");
+    await app.bus.execute("run_mail_sweep", since, as(users.solicitor));
+    await app.bus.execute("add_party", { matterId: m1998, name: "Dr Smith", role: "other", email: "dr@clinic.com.au" }, as(users.solicitor));
+    const report = documentsOf(app.store).list(TENANT, (d) => d.matterId === m1998 && d.name.endsWith("Report.pdf"))[0]!;
+    const other = documentsOf(app.store).list(TENANT, (d) => d.matterId === m2003)[0]!;
+    const send = { matterId: m1998, to: ["dr@clinic.com.au"], subject: "Report", body: "Attached." };
+    await expect(app.bus.execute("send_email", { ...send, attachDocumentIds: [other.id] }, as(users.solicitor, "agent"))).rejects.toMatchObject({ code: "not_found" });
+    const req = (await app.bus.execute("send_email", { ...send, attachDocumentIds: [report.id] }, as(users.solicitor, "agent"))) as any;
+    const pending = ((await app.bus.execute("list_approvals", { status: "pending" }, as(users.principal))) as any).result;
+    const approval = pending.find((a: any) => a.id === req.approvalId);
+    expect(approval.context.attachments).toEqual([{ id: report.id, name: "2026.10.28 Report.pdf", category: "Correspondence" }]);
+  });
+});

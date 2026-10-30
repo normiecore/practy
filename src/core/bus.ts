@@ -81,6 +81,7 @@ export class CommandBus {
           command: name,
           tier,
           input,
+          context: await def.describe?.(input, ctx),
           matterIds,
           requestedBy: ctx.actor.userId,
           requestedVia: ctx.surface,
