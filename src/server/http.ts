@@ -2,6 +2,7 @@ import { mcpAuthRouter, getOAuthProtectedResourceMetadataUrl } from "@modelconte
 import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express, { type NextFunction, type Request, type Response } from "express";
+import { rateLimit } from "express-rate-limit";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
@@ -58,6 +59,9 @@ export function createHttpServer(app: App, opts: HttpOptions) {
     );
     next();
   });
+  // Throttle sign-in, OAuth and API traffic per client address.
+  http.use(["/auth", "/oauth", "/authorize", "/token", "/register", "/integrations"], rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: "draft-7", legacyHeaders: false }));
+  http.use(["/api", "/mcp"], rateLimit({ windowMs: 60_000, limit: 600, standardHeaders: "draft-7", legacyHeaders: false }));
   http.use(express.json({ limit: "25mb" }));
   http.use(express.urlencoded({ extended: false }));
 
