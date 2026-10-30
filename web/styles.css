@@ -147,3 +147,30 @@ a.card { color: inherit; display: block; }
 a.card:hover { text-decoration: none; border-color: var(--accent); }
 fieldset.card legend { font-weight: 600; font-size: 0.85rem; padding: 0 0.3rem; }
 .modal fieldset.card { box-shadow: none; }
+
+/* Purpose-built forms (damages, Authority to Settle) */
+.modal.wide { width: min(1100px, 100%); }
+.form-group { margin-bottom: 0.9rem; }
+.form-group h3 { font-size: 0.85rem; margin: 0.4rem 0 0.4rem; }
+label.field > span.hint { display: block; font-weight: 400; font-size: 0.8rem; margin: 0.2rem 0 0; }
+.form-grid { display: grid; gap: 0 0.9rem; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.total-line { text-align: right; margin: 0.2rem 0 0; }
+.rows-table { margin-bottom: 0.5rem; }
+.rows-table th, .rows-table td { padding: 0.35rem 0.4rem; vertical-align: middle; }
+.rows-table th { text-transform: none; letter-spacing: 0; }
+.rows-table .optional { font-weight: 400; }
+.rows-table td.cell-date { min-width: 9.5rem; }
+.rows-table td.cell-money, .rows-table td.cell-number { min-width: 7rem; }
+.rows-table td.cell-money input, .rows-table td.cell-number input { text-align: right; }
+.rows-table td.cell-text { min-width: 9rem; }
+.rows-table td.cell-remove { width: 1%; }
+@media (max-width: 640px) {
+  .rows-table, .rows-table tbody, .rows-table tr, .rows-table td { display: block; width: 100%; }
+  .rows-table { border: 0; background: none; }
+  .rows-table thead { display: none; }
+  .rows-table tr { border: 1px solid var(--border); border-radius: var(--radius); padding: 0.5rem; margin-bottom: 0.5rem; background: var(--surface); }
+  .rows-table td { border: 0; padding: 0.2rem 0; min-width: 0 !important; }
+  .rows-table td[data-label]::before { content: attr(data-label); display: block; font-weight: 600; font-size: 0.8rem; margin-bottom: 0.1rem; }
+  .rows-table td.cell-money input, .rows-table td.cell-number input { text-align: left; }
+  .rows-table td.cell-remove { text-align: right; }
+}

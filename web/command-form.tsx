@@ -277,7 +277,22 @@ function Field({ name, schema: raw, value, required, onChange, patch }: FieldPro
   );
 }
 
-function NumberInput({ value, cents, integer, onChange }: { value: number | undefined; cents: boolean; integer: boolean; onChange: (v: number | undefined) => void }) {
+/** A number box that keeps partly typed text ("12.") and stores cents when asked. */
+export function NumberInput({
+  value,
+  cents,
+  integer,
+  onChange,
+  placeholder,
+  ariaLabel,
+}: {
+  value: number | undefined;
+  cents: boolean;
+  integer: boolean;
+  onChange: (v: number | undefined) => void;
+  placeholder?: string;
+  ariaLabel?: string;
+}) {
   const show = (v: number | undefined) => (v === undefined || v === null ? "" : cents ? (v / 100).toFixed(2) : String(v));
   const [text, setText] = useState(show(value));
   useEffect(() => {
@@ -290,6 +305,8 @@ function NumberInput({ value, cents, integer, onChange }: { value: number | unde
     <input
       inputMode="decimal"
       value={text}
+      placeholder={placeholder}
+      aria-label={ariaLabel}
       onChange={(e) => {
         const t = e.target.value.replace(/[$,\s]/g, "");
         setText(e.target.value);
