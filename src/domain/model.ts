@@ -1,0 +1,55 @@
+import type { IsoDate } from "../core/calendar.js";
+
+/** Pilot schemes. SRC Act / public liability follow in later rule packs. */
+export const SCHEMES = ["icwa_mva", "workcover_wa"] as const;
+export type Scheme = (typeof SCHEMES)[number];
+
+export const PARTY_ROLES = ["client", "defendant", "insurer", "employer", "driver", "witness", "other"] as const;
+export type PartyRole = (typeof PARTY_ROLES)[number];
+
+export interface Party {
+  id: string;
+  tenantId: string;
+  name: string;
+  kind: "person" | "organisation";
+  dateOfBirth?: IsoDate;
+}
+
+export interface Matter {
+  id: string;
+  tenantId: string;
+  number: string;
+  title: string;
+  scheme: Scheme;
+  status: "open" | "closed";
+  injuryDate: IsoDate;
+  openedOn: IsoDate;
+  parties: { partyId: string; role: PartyRole }[];
+  responsibleUserId: string;
+  /** Client consent to AI processing. When false the matter is invisible to AI surfaces. */
+  aiPermitted: boolean;
+  /** Ethical wall: if set, only these users can see the matter. */
+  restrictedTo?: string[];
+  /** Pointers into connected systems; Practy is the hub (MCP-FIRST.md §1.5). */
+  links: { boxFolderId?: string; xeroContactId?: string; xeroTrackingOption?: string };
+}
+
+export type KeyDateStatus = "proposed" | "confirmed" | "manual_required" | "dismissed";
+
+export interface KeyDate {
+  id: string;
+  tenantId: string;
+  matterId: string;
+  ruleId?: string;
+  rulePackVersion?: string;
+  kind: "critical" | "deadline" | "reminder";
+  title: string;
+  date: IsoDate | null;
+  status: KeyDateStatus;
+  /** False when the underlying rule is still on the verification register. */
+  ruleVerified: boolean;
+  source: string;
+  notes: string[];
+  confirmedBy?: string;
+  confirmedAt?: string;
+}

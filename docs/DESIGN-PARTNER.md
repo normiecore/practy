@@ -1,5 +1,7 @@
 # Design-partner terms: options and recommendation
 
+> **Status (30 Oct 2026):** Option C accepted. Practy is owned by a separate founding team, and Soul Legal is an arm's-length design partner. The "founded by Soul Legal's own principals" variant at the end of this document does not apply.
+
 *Not legal or tax advice. Before anything is signed, have the structure documented by a commercial lawyer and an accountant. That includes the IP assignment, the shareholder terms and the GST/tax treatment.*
 
 ## Starting point: make Practy a separate company

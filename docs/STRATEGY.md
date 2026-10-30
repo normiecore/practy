@@ -187,10 +187,11 @@ Key choices and why:
 | D4 | **Pilot matter types:** ICWA motor vehicle claims and WorkCover WA | 30 Oct 2026 | Soul Legal |
 | D5 | **Privacy Act and AML/CTF are built to full standard.** This holds even though Soul Legal (PI-only, turnover not disclosed) may be exempt or out of scope. Full APP compliance and a complete AML/CTF module (customer due diligence, sanctions and politically-exposed-person checks, suspicious matter reports, program templates). The module is **switchable**: Soul Legal runs in "not a reporting entity" mode with screening and drift alerts; larger firms switch to reporting mode. Optional client ID checks before settlement payouts, for fraud protection | 30 Oct 2026 | Soul Legal |
 | D6 | **Soul Legal does no non-PI work.** On current Law Council guidance it is outside AML/CTF, but drift alerts stay on | 30 Oct 2026 | Soul Legal |
-| D7 | **Design-partner terms:** recommended Option C (milestone-vested equity, founding-customer pricing, IP licence or assignment, DPA). See [DESIGN-PARTNER](DESIGN-PARTNER.md) | 30 Oct 2026 | Recommendation, pending sign-off |
+| D7 | **Design-partner terms: Option C.** Milestone-vested equity in Practy for Soul Legal, founding-customer pricing, IP licence or assignment of generic workflows, and a DPA. See [DESIGN-PARTNER](DESIGN-PARTNER.md) | 30 Oct 2026 | Soul Legal accepted the recommendation |
+| D8 | **Trust source:** support **both** setups: trust kept in Xero itself (Xero Accounting API, read-only), or in a trust add-on (cashbook export, with a per-vendor API adapter later). Both feed the same shadow ledger | 30 Oct 2026 | Soul Legal |
+| D9 | **Ownership:** Practy is owned by a **separate founding team**, not by Soul Legal's principals. Soul Legal is an arm's-length design partner and customer | 30 Oct 2026 | Soul Legal |
 
 ### Still open
-- Does the trust account sit in Xero itself, or in a Xero add-on (e.g. InTouch)?
 - Pilot fee earners and a baseline timesheet sample.
-- Who owns Practy (Soul Legal principals vs a separate founding team)? This decides whether Option C or D applies.
+- Design-partner term sheet to be documented by commercial lawyers for both sides (Soul Legal should get independent advice).
 - Wording of the client AI-use consent in the costs agreement.
