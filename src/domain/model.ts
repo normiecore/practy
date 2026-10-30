@@ -1,7 +1,7 @@
 import type { IsoDate } from "../core/calendar.js";
 
-/** Pilot schemes. SRC Act / public liability follow in later rule packs. */
-export const SCHEMES = ["icwa_mva", "workcover_wa"] as const;
+/** Pilot schemes with rule packs; "other" holds imported matters (public liability, SRC Act…) without automatic dates. */
+export const SCHEMES = ["icwa_mva", "workcover_wa", "other"] as const;
 export type Scheme = (typeof SCHEMES)[number];
 
 export const PARTY_ROLES = ["client", "defendant", "insurer", "employer", "driver", "witness", "other"] as const;

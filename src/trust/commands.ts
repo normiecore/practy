@@ -58,8 +58,11 @@ export class TrustService {
     this.paymentAuthorities = store.collection<PaymentAuthority>("trust_payment_authority");
   }
 
+  /** Builds a tenant's config from settings and credentials when none was registered explicitly. */
+  resolver?: (tenantId: string) => TrustTenantConfig | undefined;
+
   config(tenantId: string): TrustTenantConfig {
-    const cfg = this.configs.get(tenantId);
+    const cfg = this.configs.get(tenantId) ?? this.resolver?.(tenantId);
     if (!cfg) throw invalid("No trust source configured for this firm");
     return cfg;
   }

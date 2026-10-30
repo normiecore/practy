@@ -14,6 +14,8 @@ import type { MatterDocument } from "../documents/model.js";
 import type { MailMessage } from "../connectors/types.js";
 import { FilingService, filingCommands } from "../filing/service.js";
 import { complianceCommands } from "../compliance/commands.js";
+import { damagesCommands } from "../damages/commands.js";
+import { costsCommands } from "../costs/commands.js";
 import { IntegrationHub } from "../integrations/hub.js";
 import { domainCommands, matterGuard } from "../domain/commands.js";
 import { Store } from "../domain/store.js";
@@ -72,6 +74,8 @@ export function createApp(opts: AppOptions = {}): App {
     ...trustCommands(store, trust),
     ...chronologyCommands(chronology),
     ...filingCommands(filing),
+    ...damagesCommands(store),
+    ...costsCommands(store),
   );
   const audit = new AuditLog(undefined, (entry) =>
     store.queue.enqueue(() => store.queue.persistence.appendAudit(entry)),

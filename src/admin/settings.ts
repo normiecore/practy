@@ -83,7 +83,7 @@ export function defaultSettings(tenantId: string): TenantSettings {
     timezone: "Australia/Perth",
     identity: { providers: ["google"], allowedDomains: [], requireMfaClaim: false },
     ai: { enabled: true, provider: "anthropic", model: process.env.PRACTY_AI_MODEL ?? "", externalMcpClients: false, externalClientMaxTier: 1 },
-    documents: { store: "local", schemeLabels: { icwa_mva: "MVA", workcover_wa: "WC" }, emailsSubfolder: "Emails" },
+    documents: { store: "local", schemeLabels: { icwa_mva: "MVA", workcover_wa: "WC", other: "PI" }, emailsSubfolder: "Emails" },
     mail: { provider: "none", filingMode: "off", refileLabelPrefix: "Box Filed/Refile/", autoFile: true, autoFileCap: 60 },
     calendar: { provider: "none", calendarId: "primary" },
     firmPolicy: DEFAULT_FIRM_POLICY,

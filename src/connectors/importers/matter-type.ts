@@ -16,7 +16,7 @@ export function schemeFromMatterType(text: string | undefined): Scheme | undefin
 }
 
 /** The firm's short label used in Box folder names. */
-export const SCHEME_LABELS: Record<Scheme, string> = { icwa_mva: "MVA", workcover_wa: "WC" };
+export const SCHEME_LABELS: Record<Scheme, string> = { icwa_mva: "MVA", workcover_wa: "WC", other: "PI" };
 
 /** Source-system status text → open/closed. Unknown statuses (Pending, Active, …) are open. */
 export function statusFromText(text: string | undefined): ImportedMatter["status"] {
