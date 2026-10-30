@@ -44,13 +44,24 @@ export const sha256 = (s: string) => createHash("sha256").update(s).digest("hex"
 export class AuditLog {
   private readonly entries: AuditEntry[] = [];
 
-  constructor(private readonly now: () => Date = () => new Date()) {}
+  constructor(
+    private readonly now: () => Date = () => new Date(),
+    private readonly onAppend?: (entry: AuditEntry) => void,
+  ) {}
+
+  /** Load persisted entries; refuses a broken chain. */
+  hydrate(entries: AuditEntry[]): void {
+    const broken = this.verify(entries);
+    if (broken !== null) throw new Error(`Audit chain broken at seq ${broken}`);
+    this.entries.push(...entries.map((e) => Object.freeze(e)));
+  }
 
   append(draft: AuditDraft): AuditEntry {
     const prevHash = this.entries.at(-1)?.hash ?? GENESIS;
     const body = { ...draft, seq: this.entries.length + 1, at: this.now().toISOString(), prevHash };
     const entry: AuditEntry = { ...body, hash: sha256(canonicalJson(body)) };
     this.entries.push(Object.freeze(entry));
+    this.onAppend?.(entry);
     return entry;
   }
 

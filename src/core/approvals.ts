@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Collection } from "./collection.js";
 import type { Surface, Tier } from "./types.js";
 
 export interface ApprovalDecision {
@@ -26,22 +27,21 @@ export interface Approval {
 }
 
 export class ApprovalStore {
-  private readonly items = new Map<string, Approval>();
+  constructor(private readonly items: Collection<Approval>) {}
 
   create(a: Omit<Approval, "id" | "decisions" | "status">): Approval {
-    const approval: Approval = { ...a, id: randomUUID(), decisions: [], status: "pending" };
-    this.items.set(approval.id, approval);
-    return approval;
+    return this.items.set({ ...a, id: randomUUID(), decisions: [], status: "pending" });
   }
 
   get(tenantId: string, id: string): Approval | undefined {
-    const a = this.items.get(id);
-    return a && a.tenantId === tenantId ? a : undefined;
+    return this.items.find(tenantId, id);
+  }
+
+  save(a: Approval): Approval {
+    return this.items.set(a);
   }
 
   list(tenantId: string, status?: Approval["status"]): Approval[] {
-    return [...this.items.values()].filter(
-      (a) => a.tenantId === tenantId && (!status || a.status === status),
-    );
+    return this.items.list(tenantId, (a) => !status || a.status === status);
   }
 }

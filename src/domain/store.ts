@@ -1,22 +1,56 @@
+import { Collection, type Entity } from "../core/collection.js";
+import { MemoryPersistence, WriteQueue, type Persistence } from "../core/persistence.js";
 import type { KeyDate, Matter, Party } from "./model.js";
 
 /**
- * In-memory repository. The Postgres implementation (row-level security per tenant,
- * region-pinned) replaces this behind the same interface; Phase 0 keeps the domain
- * and policy logic testable without infrastructure.
+ * The firm's working set. Modules obtain their own typed collections with
+ * `collection(kind)`, so new features don't need to edit this file.
  */
 export class Store {
-  readonly matters = new Map<string, Matter>();
-  readonly parties = new Map<string, Party>();
-  readonly keyDates = new Map<string, KeyDate>();
+  private readonly cols = new Map<string, Collection<any>>();
+
+  constructor(
+    readonly queue: WriteQueue = new WriteQueue(new MemoryPersistence()),
+    private readonly loaded = new Map<string, unknown[]>(),
+  ) {}
+
+  static async open(persistence: Persistence): Promise<Store> {
+    return new Store(new WriteQueue(persistence), await persistence.loadAll());
+  }
+
+  collection<T extends Entity>(kind: string): Collection<T> {
+    let col = this.cols.get(kind);
+    if (!col) {
+      col = new Collection<T>(kind, this.queue);
+      col.hydrate(this.loaded.get(kind) ?? []);
+      this.cols.set(kind, col);
+    }
+    return col as Collection<T>;
+  }
+
+  get matters() {
+    return this.collection<Matter>("matter");
+  }
+  get parties() {
+    return this.collection<Party>("party");
+  }
+  get keyDates() {
+    return this.collection<KeyDate>("key_date");
+  }
 
   mattersFor(tenantId: string): Matter[] {
-    return [...this.matters.values()].filter((m) => m.tenantId === tenantId);
+    return this.matters.list(tenantId);
+  }
+
+  matterByNumber(tenantId: string, number: string): Matter | undefined {
+    return this.matters.list(tenantId, (m) => m.number === number)[0];
   }
 
   keyDatesFor(tenantId: string, matterId?: string): KeyDate[] {
-    return [...this.keyDates.values()].filter(
-      (k) => k.tenantId === tenantId && (!matterId || k.matterId === matterId),
-    );
+    return this.keyDates.list(tenantId, (k) => !matterId || k.matterId === matterId);
+  }
+
+  flush(): Promise<void> {
+    return this.queue.flush();
   }
 }

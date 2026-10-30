@@ -154,7 +154,7 @@ describe("trust controls", () => {
     const req = await run("prepare_trust_payment", { matterId: matter.id, payee: "Toni Priestley", amountCents: 3_000_000, purpose: "Balance of settlement" }, as(users.solicitor, "mcp"));
     if (req.status !== "pending_approval") throw new Error("expected approval");
     expect(req.requiredApprovals).toBe(2);
-    expect(app.trust.paymentAuthorities).toHaveLength(0);
+    expect(app.trust.paymentAuthorities.list(TENANT)).toHaveLength(0);
 
     const first = await exec("decide_approval", { approvalId: req.approvalId, decision: "approve" }, as(users.principal));
     expect(first.status).toBe("pending");

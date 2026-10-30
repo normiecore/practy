@@ -27,14 +27,20 @@ export class CommandBus {
     readonly audit: AuditLog,
     readonly approvals: ApprovalStore,
     private readonly guardMatter: MatterGuard,
+    /** Awaited after every command so responses are only sent once changes are durable. */
+    private readonly flush: () => Promise<void> = async () => {},
   ) {
     registry.register(...this.approvalCommands());
   }
 
   /** Public entry point for every surface. Callers can never supply an approval themselves. */
-  execute(name: string, rawInput: unknown, ctx: InvocationContext): Promise<CommandResult> {
+  async execute(name: string, rawInput: unknown, ctx: InvocationContext): Promise<CommandResult> {
     const { approvalId: _ignored, ...clean } = ctx;
-    return this.run(name, rawInput, clean);
+    try {
+      return await this.run(name, rawInput, clean);
+    } finally {
+      await this.flush();
+    }
   }
 
   private async run(name: string, rawInput: unknown, ctx: InvocationContext): Promise<CommandResult> {
@@ -121,10 +127,10 @@ export class CommandBus {
     approval.decisions.push({ userId: ctx.actor.userId, decision, at: new Date().toISOString(), note });
     if (decision === "reject") {
       approval.status = "rejected";
-      return approval;
+      return this.approvals.save(approval);
     }
     if (approval.decisions.filter((d) => d.decision === "approve").length < approval.requiredApprovals) {
-      return approval;
+      return this.approvals.save(approval);
     }
     approval.status = "approved";
     try {
@@ -135,7 +141,7 @@ export class CommandBus {
       approval.status = "failed";
       approval.error = err instanceof Error ? err.message : String(err);
     }
-    return approval;
+    return this.approvals.save(approval);
   }
 
   private approvalCommands(): CommandDef<any, any>[] {

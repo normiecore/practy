@@ -45,15 +45,18 @@ export interface PaymentAuthority {
 
 export class TrustService {
   readonly configs = new Map<string, TrustTenantConfig>();
-  readonly reconciliations: StoredReconciliation[] = [];
-  readonly paymentAuthorities: PaymentAuthority[] = [];
+  readonly reconciliations;
+  readonly paymentAuthorities;
   private readonly cache = new Map<string, CashbookEntry[]>();
 
   constructor(
     private readonly store: Store,
     private readonly calendar: WorkingCalendar = WA_CALENDAR,
     private readonly today: () => IsoDate = () => new Date().toISOString().slice(0, 10),
-  ) {}
+  ) {
+    this.reconciliations = store.collection<StoredReconciliation>("trust_reconciliation");
+    this.paymentAuthorities = store.collection<PaymentAuthority>("trust_payment_authority");
+  }
 
   config(tenantId: string): TrustTenantConfig {
     const cfg = this.configs.get(tenantId);
@@ -85,7 +88,7 @@ export class TrustService {
   async availableBalance(tenantId: string, matterRef: string): Promise<Cents> {
     const held = (await this.ledgerBalances(tenantId)).get(matterRef) ?? 0;
     const committed = this.paymentAuthorities
-      .filter((p) => p.tenantId === tenantId && p.matterRef === matterRef)
+      .list(tenantId, (p) => p.matterRef === matterRef)
       .reduce((s, p) => s + p.amount, 0);
     return held - committed;
   }
@@ -113,8 +116,7 @@ export class TrustService {
       sourceKind: cfg.source.info.kind,
       hash: sha256(canonicalJson(rec)),
     });
-    this.reconciliations.push(stored);
-    return stored;
+    return this.reconciliations.set(stored);
   }
 }
 
@@ -187,7 +189,7 @@ export function trustCommands(store: Store, trust: TrustService) {
       tier: 0,
       roles: TRUST_STAFF,
       input: z.object({}),
-      handler: (_i, ctx) => trust.reconciliations.filter((r) => r.tenantId === ctx.actor.tenantId),
+      handler: (_i, ctx) => trust.reconciliations.list(ctx.actor.tenantId),
     }),
 
     defineCommand({
@@ -199,14 +201,11 @@ export function trustCommands(store: Store, trust: TrustService) {
       approverRoles: ["principal"],
       input: z.object({ reconciliationId: z.string() }),
       handler: ({ reconciliationId }, ctx) => {
-        const i = trust.reconciliations.findIndex((r) => r.id === reconciliationId && r.tenantId === ctx.actor.tenantId);
-        const rec = trust.reconciliations[i];
+        const rec = trust.reconciliations.find(ctx.actor.tenantId, reconciliationId);
         if (!rec) throw notFound("Reconciliation");
         if (rec.signedOffBy) throw conflict("Already signed off");
         if (!rec.reconciled) throw conflict("Cannot sign off a reconciliation with unresolved breaches");
-        const signed = Object.freeze({ ...rec, signedOffBy: ctx.actor.userId, signedOffAt: new Date().toISOString() });
-        trust.reconciliations[i] = signed;
-        return signed;
+        return trust.reconciliations.set(Object.freeze({ ...rec, signedOffBy: ctx.actor.userId, signedOffAt: new Date().toISOString() }));
       },
     }),
 
@@ -240,8 +239,7 @@ export function trustCommands(store: Store, trust: TrustService) {
           status: "authorised",
           authorisedAt: new Date().toISOString(),
         };
-        trust.paymentAuthorities.push(pa);
-        return pa;
+        return trust.paymentAuthorities.set(pa);
       },
     }),
   ];

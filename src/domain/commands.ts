@@ -88,7 +88,7 @@ function applyEvent(store: Store, matter: Matter, event: MatterEvent, policy: Fi
       status: p.date === null ? "manual_required" : "proposed",
       ...p,
     };
-    store.keyDates.set(kd.id, kd);
+    store.keyDates.set(kd);
     return kd;
   });
 }
@@ -125,13 +125,13 @@ export function domainCommands(store: Store, policy: FirmPolicy = DEFAULT_FIRM_P
       }),
       handler: (input, ctx) => {
         const tenantId = ctx.actor.tenantId;
-        if (store.mattersFor(tenantId).some((m) => m.number === input.number)) {
+        if (store.matterByNumber(tenantId, input.number)) {
           throw conflict(`Matter number ${input.number} already exists`);
         }
         const conflicts = conflictSearch(store, ctx, [input.client.name, ...input.otherParties.map((p) => p.name)]);
         const mkParty = (name: string, kind: Party["kind"], dateOfBirth?: string): Party => {
           const p: Party = { id: randomUUID(), tenantId, name, kind, ...(dateOfBirth ? { dateOfBirth } : {}) };
-          store.parties.set(p.id, p);
+          store.parties.set(p);
           return p;
         };
         const client = mkParty(input.client.name, "person", input.client.dateOfBirth);
@@ -152,7 +152,7 @@ export function domainCommands(store: Store, policy: FirmPolicy = DEFAULT_FIRM_P
           aiPermitted: input.aiPermitted,
           links: input.boxFolderId ? { boxFolderId: input.boxFolderId } : {},
         };
-        store.matters.set(matter.id, matter);
+        store.matters.set(matter);
         const keyDates = applyEvent(store, matter, { type: "matter_opened" }, policy);
         return { matter, conflicts, keyDates };
       },
@@ -269,7 +269,7 @@ export function domainCommands(store: Store, policy: FirmPolicy = DEFAULT_FIRM_P
           kd.date = date;
           kd.status = "proposed";
           kd.notes.push(`Date entered by ${ctx.actor.displayName}${note ? `: ${note}` : ""}`);
-          return kd;
+          return store.keyDates.set(kd);
         }
         const kd: KeyDate = {
           id: randomUUID(),
@@ -283,7 +283,7 @@ export function domainCommands(store: Store, policy: FirmPolicy = DEFAULT_FIRM_P
           source: `Entered by ${ctx.actor.displayName}`,
           notes: note ? [note] : [],
         };
-        store.keyDates.set(kd.id, kd);
+        store.keyDates.set(kd);
         return kd;
       },
     }),
@@ -303,7 +303,7 @@ export function domainCommands(store: Store, policy: FirmPolicy = DEFAULT_FIRM_P
         kd.status = "confirmed";
         kd.confirmedBy = ctx.actor.userId;
         kd.confirmedAt = new Date().toISOString();
-        return kd;
+        return store.keyDates.set(kd);
       },
     }),
 
@@ -318,6 +318,7 @@ export function domainCommands(store: Store, policy: FirmPolicy = DEFAULT_FIRM_P
       handler: ({ matterId, aiPermitted }) => {
         const m = getMatter(matterId);
         m.aiPermitted = aiPermitted;
+        store.matters.set(m);
         return { matterId, aiPermitted };
       },
     }),
