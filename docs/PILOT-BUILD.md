@@ -57,7 +57,7 @@ Firm templates (the Authority to Settle form and the letterhead) are **tenant as
 | 14 | Web app (React): matters, matter workspace, approvals inbox, diary, filing review, documents, chronology, damages, settlement, trust, compliance, settings, chat | ✅ first version | `web/`. Hash routing; every screen calls the command API. `web/command-form.tsx` renders any command from its JSON Schema, so every command is usable in the app (matter "All actions" tab, "All commands" page) before it gets a bespoke screen. Smoke-tested in Chromium; no automated UI tests yet. `pilot/web` was never pushed, so this replaces it |
 | 15 | Deploy: Dockerfile, docker-compose, AWS ap-southeast-2 guide, backups, onboarding runbook | ✅ done | `Dockerfile`, `docker-compose.yml`, `docs/DEPLOY.md`, `docs/ONBOARDING.md`; CI builds the image |
 
-## Pilot onboarding inputs needed from Soul Legal (not in repo)
+## Pilot onboarding inputs (gathered inside Soul Legal; never committed)
 - The Authority to Settle `.docx` and letterhead `.docx` (uploaded in Settings → Templates).
 - Staff list with fee-earner categories (SP / JP / C/PL) and roles.
 - Box: the enterprise app (Client Credentials Grant) and the PracticePanther root folder id.
@@ -78,8 +78,7 @@ Firm templates (the Authority to Settle form and the letterhead) are **tenant as
 - **No open PRs.** Everything is merged into `main` (normiecore/practy#1 to #3).
 - **Security review done and fixed:** `docs/SECURITY-REVIEW.md` lists the 14 findings (3 high), all fixed with tests (merged in normiecore/practy#3), plus the behaviour changes and residual risks the firm should know about. The penetration test is still outstanding.
 - **Repo is public** (made public so Actions runs free; private runs were blocked by account billing). Keep client data, firm templates and credentials out of it.
-- **Old branches:** `pilot/connectors`, `pilot/docgen`, `pilot/damages-costs` and `research/strategy-and-compliance` are merged into `main` and can be deleted.
-- **Onboarding request for Soul Legal:** drafted in `docs/ONBOARDING-REQUEST.md`, not yet sent.
+- **Old branches:** `pilot/connectors`, `pilot/docgen`, `pilot/damages-costs` and `research/strategy-and-compliance` are merged into `main` and can be deleted (agent sessions are not permitted to delete remote branches).
 
 ## Handover notes (keep current)
 - **Run locally:** see README → Development. Tests: `npm run check`. Include the Postgres test with `TEST_DATABASE_URL=postgres://…`.
