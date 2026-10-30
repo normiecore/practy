@@ -51,14 +51,18 @@ function DedicatedFormButton({
   label,
   title = label,
   wide,
+  disabled,
   render,
   ...fallback
-}: CommandFormProps & { label: string; title?: string; wide?: boolean; render: (close: () => void) => ReactNode }) {
+}: CommandFormProps & { label: string; title?: string; wide?: boolean; disabled?: boolean; render: (close: () => void) => ReactNode }) {
   const [open, setOpen] = useState<"form" | "all">();
   const close = () => setOpen(undefined);
   return (
     <>
-      <button onClick={() => setOpen("form")}>{label}</button>
+      {/* Disabled until the saved version has loaded, so the form never opens empty and stays that way. */}
+      <button disabled={disabled} onClick={() => setOpen("form")}>
+        {label}
+      </button>
       {open && (
         <Modal title={title} onClose={close} wide={wide}>
           <p className="small" style={{ textAlign: "right", margin: 0 }}>
@@ -686,6 +690,7 @@ function Damages({ m }: { m: MatterDetail }) {
           label={latest ? "New version" : "Compute damages"}
           title={latest ? "Particulars of damages: new version" : "Particulars of damages"}
           wide
+          disabled={dmg.data === undefined && !dmg.error}
           name="compute_damages"
           fixed={fixed}
           initial={latest ? withoutMatter(latest.input) : undefined}
@@ -790,6 +795,7 @@ function Settlement({ m }: { m: MatterDetail }) {
               label="Compute"
               title="Authority to Settle"
               wide
+              disabled={saved.data === undefined && !saved.error}
               name="compute_authority_to_settle"
               fixed={fixed}
               initial={authority ? withoutMatter(authority.input) : { clientName: client }}

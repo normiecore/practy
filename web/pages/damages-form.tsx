@@ -38,6 +38,7 @@ const COLUMNS: Record<string, Column[]> = {
     { key: "providerPayer", label: "Provider or payee", kind: "text" },
     { key: "item", label: "Item", kind: "text" },
     { key: "amountCents", label: "Amount", kind: "money" },
+    { key: "period", label: "Period as shown", kind: "text", optional: true },
     {
       key: "paidBy",
       label: "Paid by",
@@ -97,7 +98,8 @@ const today = () => new Date().toISOString().slice(0, 10);
 function startingDraft(previous: Draft | undefined, d: DamagesDefaults): Draft {
   if (previous) {
     const { matterId: _m, ...rest } = previous;
-    return { ...rest, calculationDate: rest.calculationDate ?? today() };
+    // A new version is worked out to today; the previous date is shown beside the field.
+    return { ...rest, calculationDate: today() };
   }
   return {
     scheme: d.scheme,
@@ -182,7 +184,12 @@ export function DamagesForm({ matterId, previous, defaults, onDone }: { matterId
             hint="Used for the life tables"
           />
           <DateField label="Date of injury" value={v.injuryDate} onChange={(x) => set("injuryDate", x)} />
-          <DateField label="Calculation date" value={v.calculationDate} onChange={(x) => set("calculationDate", x)} />
+          <DateField
+            label="Calculation date"
+            value={v.calculationDate}
+            onChange={(x) => set("calculationDate", x)}
+            hint={previous?.calculationDate && previous.calculationDate !== v.calculationDate ? `The previous version was worked out to ${previous.calculationDate}` : undefined}
+          />
           <SelectField label="Scheme" value={v.scheme} onChange={(x) => set("scheme", x)} options={SCHEMES} blank="Matter's scheme" />
           <NumberField label="Whole person impairment" suffix="%" value={v.wpiPercent} onChange={(x) => set("wpiPercent", x)} hint="For the WorkCover s 424 band" />
           <MoneyField label="Section 424 cap" value={v.s424CapCents} onChange={(x) => set("s424CapCents", x)} hint="WorkCover only, once confirmed" />

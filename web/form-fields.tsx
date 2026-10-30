@@ -118,7 +118,7 @@ export function LineItems({ columns, rows, onChange, addLabel = "Add row", empty
                 <tr key={i}>
                   {columns.map((c) => (
                     <td key={c.key} data-label={c.label + (c.kind === "money" ? " ($)" : "") + (c.optional ? " (optional)" : "")} className={`cell-${c.kind}`}>
-                      <Cell column={c} value={r[c.key]} onChange={(v) => set(i, c.key, v)} />
+                      <Cell column={c} row={i} value={r[c.key]} onChange={(v) => set(i, c.key, v)} />
                     </td>
                   ))}
                   <td className="cell-remove">
@@ -139,10 +139,11 @@ export function LineItems({ columns, rows, onChange, addLabel = "Add row", empty
   );
 }
 
-function Cell({ column: c, value, onChange }: { column: Column; value: unknown; onChange: (v: unknown) => void }) {
+function Cell({ column: c, row, value, onChange }: { column: Column; row: number; value: unknown; onChange: (v: unknown) => void }) {
+  const label = `${c.label}, row ${row + 1}`;
   if (c.options) {
     return (
-      <select aria-label={c.label} value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value || undefined)}>
+      <select aria-label={label} value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value || undefined)}>
         <option value="">{c.optional ? "—" : "Choose…"}</option>
         {c.options.map(([v, l]) => (
           <option key={v} value={v}>
@@ -153,9 +154,9 @@ function Cell({ column: c, value, onChange }: { column: Column; value: unknown; 
     );
   }
   if (c.kind === "money" || c.kind === "number") {
-    return <NumberInput ariaLabel={c.label} value={value as number | undefined} cents={c.kind === "money"} integer={c.kind === "money"} onChange={onChange} />;
+    return <NumberInput ariaLabel={label} value={value as number | undefined} cents={c.kind === "money"} integer={c.kind === "money"} onChange={onChange} />;
   }
-  return <input aria-label={c.label} type={c.kind === "date" ? "date" : "text"} value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} />;
+  return <input aria-label={label} type={c.kind === "date" ? "date" : "text"} value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} />;
 }
 
 // ------------------------------------------------------------ payload clean-up
