@@ -25,6 +25,8 @@ export interface MatterDocument {
   /** Suppressed, privileged or implied-undertaking material: excluded from AI processing. */
   aiExcluded?: boolean;
   aiExcludedReason?: string;
+  /** Source documents this one was compiled or converted from; their evidence and AI-exclusion flags carry over. */
+  derivedFrom?: string[];
   createdAt: string;
   createdBy: string;
 }

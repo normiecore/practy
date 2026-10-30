@@ -68,6 +68,33 @@ describe("in-app assistant", () => {
     await expect(app.agent.send(users.solicitor, convo.id, "hi", () => {})).rejects.toMatchObject({ code: "not_found" });
   });
 
+  it("will not replay a transcript holding matter data after AI consent is withdrawn or a wall goes up", async () => {
+    const tool = (id: string, name: string, input: object) => msg([{ type: "tool_use", id, name, input } as B.BetaToolUseBlock], "tool_use");
+    const text = (t: string) => msg([{ type: "text", text: t } as B.BetaTextBlock], "end_turn");
+    const app = createApp({ chatModel: () => model });
+    const open = async (number: string) =>
+      ((await app.bus.execute("create_matter", { number, title: `M ${number}`, scheme: "icwa_mva", injuryDate: "2026-01-01", client: { name: "X Y" } }, as(users.solicitor))) as any).result.matter.id as string;
+    const consent = await open("3001");
+    const walled = await open("3002");
+    const model: ScriptedModel = new ScriptedModel([
+      tool("t1", "get_matter", { matterId: consent }), text("Here it is."),
+      tool("t2", "get_matter", { matterId: walled }), text("And that one."),
+    ]);
+    const a = app.agent.start(users.solicitor);
+    await app.agent.send(users.solicitor, a.id, "Tell me about 3001", () => {});
+    const b = app.agent.start(users.solicitor);
+    await app.agent.send(users.solicitor, b.id, "Tell me about 3002", () => {});
+    expect(app.agent.get(users.solicitor, a.id).matterIds).toEqual([consent]);
+
+    // Client withdraws AI consent on 3001; 3002 is walled off from this user.
+    app.store.matters.set({ ...app.store.matters.get(consent)!, aiPermitted: false });
+    app.store.matters.set({ ...app.store.matters.get(walled)!, restrictedTo: [users.principal.userId] });
+    const sent = model.turns.length;
+    await expect(app.agent.send(users.solicitor, a.id, "remind me what it said", () => {})).rejects.toMatchObject({ code: "forbidden" });
+    await expect(app.agent.send(users.solicitor, b.id, "remind me what it said", () => {})).rejects.toMatchObject({ code: "forbidden" });
+    expect(model.turns.length).toBe(sent);
+  });
+
   it("produces valid JSON-schema tool definitions for every command", () => {
     const app = createApp({ chatModel: () => new ScriptedModel() });
     for (const t of toolsFor(app.bus) as B.BetaTool[]) {
@@ -114,9 +141,13 @@ describe("medical chronology", () => {
     ]);
     expect(app.chronology.runs.list(TENANT)[0]).toMatchObject({ model: "fake-model", pages: 2, events: 3 });
 
-    // Documents excluded from AI are refused.
-    documentsOf(app.store).update("d1", (d) => { d.aiExcluded = true; d.aiExcludedReason = "suppressed"; });
+    // Documents excluded from AI are refused, and events already extracted from them are hidden from AI surfaces.
+    await app.bus.execute("restrict_document_ai", { matterId, documentId: "d1", reason: "suppressed" }, as(users.solicitor));
     await expect(app.bus.execute("build_chronology", { matterId, documentId: "d1" }, as(users.paralegal))).rejects.toMatchObject({ code: "forbidden" });
+    for (const surface of ["agent", "mcp"] as const) {
+      expect((await app.bus.execute("get_chronology", { matterId }, as(users.solicitor, surface)) as any).result).toEqual([]);
+    }
+    expect((await app.bus.execute("get_chronology", { matterId }, as(users.solicitor)) as any).result).toHaveLength(3);
   });
 
   it("matches quotes despite whitespace and punctuation differences", () => {

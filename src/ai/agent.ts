@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type * as B from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { z } from "zod";
 import { settingsFor } from "../admin/settings.js";
-import type { CommandBus } from "../core/bus.js";
+import type { CommandBus, CommandResult } from "../core/bus.js";
 import { forbidden, notFound, PractyError } from "../core/errors.js";
 import { defineCommand } from "../core/registry.js";
 import type { Actor } from "../core/types.js";
@@ -20,6 +20,8 @@ export interface Conversation {
   userId: string;
   matterId?: string;
   title: string;
+  /** Matters whose data earlier tool results put into the transcript; re-checked before every replay. */
+  matterIds?: string[];
   /** Append-only transcript as sent to the model (assistant content kept verbatim). */
   messages: B.BetaMessageParam[];
   createdAt: string;
@@ -104,6 +106,19 @@ export class AgentService {
       // Throws not_found when the matter has no AI consent or is walled from this user.
       await this.bus.execute("get_matter", { matterId: convo.matterId }, { actor, surface: "agent" });
     }
+    // The whole transcript is replayed to the model, so every matter an earlier tool result
+    // came from must still be visible to this user with AI consent.
+    for (const matterId of convo.matterIds ?? []) {
+      if (matterId === convo.matterId) continue;
+      try {
+        await this.bus.execute("get_matter", { matterId }, { actor, surface: "agent" });
+      } catch (err) {
+        if (err instanceof PractyError && err.code === "not_found") {
+          throw forbidden("This conversation contains matter information that can no longer be sent to the assistant. Start a new conversation.");
+        }
+        throw err;
+      }
+    }
     const model = this.model(actor.tenantId);
     const context = convo.matterId && convo.messages.length === 0 ? `[Context: this conversation is about matter id ${convo.matterId}]\n\n` : "";
     convo.messages.push({ role: "user", content: `${context}${text}` });
@@ -126,6 +141,7 @@ export class AgentService {
           emit({ type: "tool_call", id: call.id, name: call.name, input: call.input });
           try {
             const out = await this.bus.execute(call.name, call.input, { actor, surface: "agent" });
+            this.touched(convo, call.name, call.input, out);
             emit({ type: "tool_result", id: call.id, name: call.name, status: out.status, approvalId: out.status === "pending_approval" ? out.approvalId : undefined });
             let body = JSON.stringify(out);
             if (body.length > MAX_RESULT_CHARS) body = `${body.slice(0, MAX_RESULT_CHARS)}… [truncated: ask for a narrower query]`;
@@ -146,6 +162,17 @@ export class AgentService {
       this.save(convo);
       await this.store.flush();
     }
+  }
+
+  /** Records the matters a tool call's result may have put into the transcript. */
+  private touched(c: Conversation, name: string, input: unknown, out: CommandResult) {
+    const def = this.bus.registry.get(name);
+    const parsed = def?.input.safeParse(input ?? {});
+    const ids = [
+      ...(parsed?.success ? (def!.matterIds?.(parsed.data) ?? []) : []),
+      ...(out.status === "executed" ? (def?.resultMatterIds?.(out.result) ?? []) : []),
+    ];
+    if (ids.length) c.matterIds = [...new Set([...(c.matterIds ?? []), ...ids])];
   }
 
   private save(c: Conversation) {

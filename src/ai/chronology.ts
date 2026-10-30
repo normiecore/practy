@@ -5,6 +5,7 @@ import { z } from "zod";
 import { settingsFor } from "../admin/settings.js";
 import { conflict, forbidden, notFound } from "../core/errors.js";
 import { defineCommand } from "../core/registry.js";
+import { AI_SURFACES } from "../core/types.js";
 import type { Store } from "../domain/store.js";
 import { documentsOf, type MatterDocument } from "../documents/model.js";
 import type { ChatModel } from "./gateway.js";
@@ -205,14 +206,18 @@ export function chronologyCommands(svc: ChronologyService) {
     defineCommand({
       name: "get_chronology",
       title: "Medical chronology",
-      description: "The matter's chronology events in date order, with page citations, verification and review status.",
+      description: "The matter's chronology events in date order, with page citations, verification and review status. AI surfaces do not see events from documents excluded from AI.",
       tier: 0,
       input: z.object({ matterId: z.string(), includeRejected: z.boolean().default(false) }),
       matterIds: (i) => [i.matterId],
-      handler: ({ matterId, includeRejected }, ctx) =>
-        svc.events
-          .list(ctx.actor.tenantId, (e) => e.matterId === matterId && (includeRejected || e.reviewStatus !== "rejected"))
-          .sort((a, b) => (a.date ?? "9999").localeCompare(b.date ?? "9999") || a.page - b.page),
+      handler: ({ matterId, includeRejected }, ctx) => {
+        // An exclusion added after extraction hides the document's events from AI surfaces too.
+        const docs = documentsOf(svc.store);
+        const ai = AI_SURFACES.includes(ctx.surface);
+        return svc.events
+          .list(ctx.actor.tenantId, (e) => e.matterId === matterId && (includeRejected || e.reviewStatus !== "rejected") && !(ai && docs.find(ctx.actor.tenantId, e.documentId)?.aiExcluded))
+          .sort((a, b) => (a.date ?? "9999").localeCompare(b.date ?? "9999") || a.page - b.page);
+      },
     }),
     defineCommand({
       name: "review_chronology_event",
