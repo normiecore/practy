@@ -1,0 +1,61 @@
+import { describe, expect, it } from "vitest";
+import { as, openMatter, setup, TENANT, users } from "./helpers.js";
+
+describe("compliance registers", () => {
+  it("tracks privacy requests and breach clocks", async () => {
+    const { exec, run } = setup();
+    const req = await exec("log_privacy_request", { kind: "access", requesterName: "Toni Priestley", details: "Copy of my file", receivedOn: "2026-09-01" }, as(users.paralegal));
+    expect(req.dueBy).toBe("2026-10-01");
+    expect((await exec<any[]>("list_privacy_requests", {}, as(users.paralegal)))[0].overdue).toBe(true);
+
+    const breach = await exec("report_breach", { discoveredAt: "2026-10-20T02:00:00.000Z", description: "Email sent to wrong recipient", dataKinds: ["health"] }, as(users.solicitor));
+    expect(breach.assessmentDue).toBe("2026-11-19");
+    await expect(exec("record_breach_notification", { breachId: breach.id, oaicNotifiedAt: "2026-10-21T00:00:00.000Z" }, as(users.solicitor))).rejects.toMatchObject({ code: "conflict" });
+    const pending = await run("assess_breach", { breachId: breach.id, eligible: true, reasoning: "Health information to unknown recipient" }, as(users.solicitor));
+    if (pending.status !== "pending_approval") throw new Error();
+    await exec("decide_approval", { approvalId: pending.approvalId, decision: "approve" }, as(users.principal));
+    await exec("record_breach_notification", { breachId: breach.id, oaicNotifiedAt: "2026-10-21T00:00:00.000Z" }, as(users.solicitor));
+    const ransom = await exec("record_ransomware_payment", { breachId: breach.id, paidAt: "2026-10-22T00:00:00.000Z" }, as(users.principal));
+    expect(ransom.ransomware.reportDueAt).toBe("2026-10-25T00:00:00.000Z");
+  });
+
+  it("generates the ADM privacy-policy clause from the register", async () => {
+    const { exec } = setup();
+    const reg = await exec<any[]>("list_adm_register", {}, as(users.solicitor));
+    expect(reg.length).toBeGreaterThanOrEqual(3);
+    const { text } = await exec("privacy_policy_adm_clause", {}, as(users.solicitor));
+    expect(text).toMatch(/Key-date rule pack/);
+    expect(text).toMatch(/lawyer remains responsible/);
+  });
+
+  it("screens matters for AML designated services", async () => {
+    const { exec } = setup();
+    const { matter } = await openMatter(exec);
+    const no = Object.fromEntries(["real_estate", "body_corporate", "trust_arrangement", "business_sale", "managing_client_money", "investments", "nominee"].map((k) => [k, false]));
+    expect((await exec("aml_screen_matter", { matterId: matter.id, answers: no }, as(users.solicitor))).designatedService).toBe(false);
+    expect((await exec("aml_status", {}, as(users.solicitor))).unscreened).toHaveLength(0);
+    expect((await exec("aml_screen_matter", { matterId: matter.id, answers: { ...no, trust_arrangement: true } }, as(users.solicitor))).designatedService).toBe(true);
+    expect((await exec("aml_status", {}, as(users.solicitor))).designated).toHaveLength(1);
+  });
+
+  it("computes retention dates with the minor rule and respects legal holds", async () => {
+    const { exec, run } = setup();
+    const { matter } = await openMatter(exec, { client: { name: "Young Person", dateOfBirth: "2015-06-01" } });
+    await exec("update_matter", { matterId: matter.id, status: "closed" }, as(users.solicitor));
+    const [row] = await exec<any[]>("retention_report", {}, as(users.principal));
+    expect(row.destroyNotBefore).toBe("2040-06-01");
+    const hold = await run("set_legal_hold", { matterId: matter.id, on: true, reason: "Anticipated proceedings" }, as(users.solicitor));
+    if (hold.status !== "pending_approval") throw new Error();
+    await exec("decide_approval", { approvalId: hold.approvalId, decision: "approve" }, as(users.principal));
+    expect((await exec<any[]>("retention_report", {}, as(users.principal)))[0].legalHold).toBe(true);
+  });
+
+  it("exports the AI-use log for a matter", async () => {
+    const { exec } = setup();
+    const { matter } = await openMatter(exec);
+    await exec("get_matter", { matterId: matter.id }, as(users.solicitor, "mcp"));
+    const log = await exec("export_ai_use_log", { matterId: matter.id }, as(users.solicitor));
+    expect(log.toolCalls.map((c: any) => [c.surface, c.command])).toEqual([["mcp", "get_matter"]]);
+    expect(TENANT).toBe("t-soul");
+  });
+});
