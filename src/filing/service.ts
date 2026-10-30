@@ -80,7 +80,7 @@ export class FilingService {
 
   constructor(
     readonly store: Store,
-    private readonly hub: IntegrationHub,
+    readonly hub: IntegrationHub,
     private readonly renderPdf: (m: MailMessage) => Promise<Uint8Array>,
   ) {
     this.items = store.collection<MailItem>("mail_item");
@@ -243,7 +243,24 @@ export class FilingService {
   }
 }
 
+/** Addresses an outbound email may go to: parties on the matter and anyone already corresponding on it. */
+export function allowedRecipients(svc: FilingService, tenantId: string, matterId: string): Set<string> {
+  const m = svc.store.matters.find(tenantId, matterId);
+  const out = new Set<string>();
+  for (const l of m?.parties ?? []) {
+    const e = svc.store.parties.get(l.partyId)?.email;
+    if (e) out.add(e.toLowerCase());
+  }
+  for (const i of svc.items.list(tenantId, (i) => i.matterId === matterId && i.status === "filed")) if (i.from) out.add(i.from.toLowerCase());
+  return out;
+}
+
 export function filingCommands(svc: FilingService) {
+  const checkRecipients = (tenantId: string, matterId: string, addresses: string[]) => {
+    const allowed = allowedRecipients(svc, tenantId, matterId);
+    const blocked = addresses.filter((a) => !allowed.has(a.toLowerCase()));
+    if (blocked.length) throw invalid(`Not a party or correspondent on this matter: ${blocked.join(", ")}. Add them as a party first.`);
+  };
   const own = (tenantId: string, userId: string, id: string) => {
     const item = svc.items.find(tenantId, id);
     if (!item || item.userId !== userId) throw notFound("Email");
@@ -284,6 +301,47 @@ export function filingCommands(svc: FilingService) {
         const item = own(ctx.actor.tenantId, ctx.actor.userId, itemId);
         if (item.status === "filed" && item.matterId === matterId) throw invalid("Already filed to this matter");
         return svc.file(ctx.actor, item, matterId);
+      },
+    }),
+    defineCommand({
+      name: "send_email",
+      title: "Send an email on a matter",
+      description:
+        "Send an email from the approving practitioner's mailbox to parties or existing correspondents on the matter, optionally attaching matter documents. Outward-facing: requires practitioner approval. The sent email is filed to the matter.",
+      tier: 2,
+      roles: [...STAFF],
+      input: z.object({
+        matterId: z.string(),
+        to: z.array(z.email()).min(1),
+        cc: z.array(z.email()).default([]),
+        subject: z.string().min(1),
+        body: z.string().min(1),
+        attachDocumentIds: z.array(z.string()).default([]),
+      }),
+      matterIds: (i) => [i.matterId],
+      precheck: ({ matterId, to, cc }, ctx) => checkRecipients(ctx.actor.tenantId, matterId, [...to, ...cc]),
+      handler: async ({ matterId, to, cc, subject, body, attachDocumentIds }, ctx) => {
+        checkRecipients(ctx.actor.tenantId, matterId, [...to, ...cc]);
+        const mail = svc.hub.mail(ctx.actor.tenantId, ctx.actor.userId);
+        if (!mail) throw conflict("Connect your mailbox first (Settings → Integrations)");
+        const attachments = [];
+        for (const id of attachDocumentIds) {
+          const d = documentsOf(svc.store).find(ctx.actor.tenantId, id);
+          if (!d || d.matterId !== matterId) throw notFound(`Document ${id}`);
+          attachments.push({ filename: d.name, contentType: d.contentType, bytes: await svc.hub.requireDocuments(ctx.actor.tenantId).download(d.storeFileId) });
+        }
+        const sent = await mail.send({ to: to.map((email) => ({ email })), cc: cc.map((email) => ({ email })), subject, text: body, attachments });
+        const mailbox = (await mail.mailbox()).toLowerCase();
+        const item: MailItem = svc.items.set({
+          id: `${ctx.actor.tenantId}:${mailbox}:${sent.id}`, tenantId: ctx.actor.tenantId, userId: ctx.actor.userId, mailbox, messageId: sent.id, threadId: sent.threadId,
+          subject, from: mailbox, date: new Date().toISOString(), decision: "file", confidence: 1, evidence: ["sent from Practy"], candidates: [matterId], matterId, status: "review",
+        });
+        try {
+          return await svc.file(ctx.actor, item, matterId);
+        } catch (err) {
+          // Sent successfully; filing can be retried from the review queue.
+          return svc.items.set({ ...item, error: `Sent, but filing failed: ${(err as Error).message}` });
+        }
       },
     }),
     defineCommand({

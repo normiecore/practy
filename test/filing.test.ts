@@ -100,4 +100,18 @@ describe("filing service", () => {
     expect(inbox.labels.get("a")).toEqual(["Box Filed/Refile/1998"]);
     expect(docs.files.size).toBe(0);
   });
+
+  it("sends email only to matter parties, after approval, and files the sent copy", async () => {
+    const { app, inbox, docs, m1998 } = await setupFiling("practy");
+    await app.bus.execute("add_party", { matterId: m1998, name: "Dr Smith", role: "other", email: "dr@clinic.com.au" }, as(users.solicitor));
+    await expect(app.bus.execute("send_email", { matterId: m1998, to: ["stranger@evil.com"], subject: "x", body: "y" }, as(users.solicitor, "agent"))).rejects.toMatchObject({ code: "invalid" });
+    expect(((await app.bus.execute("list_approvals", { status: "pending" }, as(users.principal))) as any).result).toHaveLength(0);
+    expect(inbox.sent).toHaveLength(0);
+
+    const req = (await app.bus.execute("send_email", { matterId: m1998, to: ["dr@clinic.com.au"], subject: "Request for report", body: "Please provide your report." }, as(users.solicitor, "agent"))) as any;
+    const done = (await app.bus.execute("decide_approval", { approvalId: req.approvalId, decision: "approve" }, as(users.solicitor))) as any;
+    expect(done.result.status).toBe("executed");
+    expect(inbox.sent[0]!.to).toEqual([{ email: "dr@clinic.com.au" }]);
+    expect(docs.namesIn("Emails").some((n) => n.includes("EM to dr@clinic.com.au re Request for report"))).toBe(true);
+  });
 });

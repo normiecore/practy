@@ -23,6 +23,8 @@ export interface CommandDef<I extends z.ZodObject = z.ZodObject, O = unknown> {
   matterIds?: (input: z.infer<I>) => string[];
   /** Matters created or touched as revealed by the result (e.g. a newly opened matter). */
   resultMatterIds?: (result: any) => string[]; // annotate the parameter where the command is defined
+  /** Runs before an approval request is created (and again at execution via the handler): reject doomed requests early. */
+  precheck?: (input: z.infer<I>, ctx: InvocationContext) => void | Promise<void>;
   handler: (input: z.infer<I>, ctx: InvocationContext) => O | Promise<O>;
 }
 

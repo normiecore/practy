@@ -83,7 +83,10 @@ export class FakeMailSource implements MailSource {
   async removeLabel() {}
   async send(m: OutgoingMail) {
     this.sent.push(m);
-    return { id: `s${this.sent.length}`, threadId: m.threadId ?? `t-s${this.sent.length}` };
+    const id = `s${this.sent.length}`;
+    const threadId = m.threadId ?? `t-${id}`;
+    this.messages.push({ id, threadId, from: { email: this.address }, to: m.to, cc: m.cc ?? [], subject: m.subject, date: new Date().toISOString(), text: m.text, attachments: [], labels: [] });
+    return { id, threadId };
   }
 }
 

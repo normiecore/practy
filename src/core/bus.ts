@@ -72,6 +72,7 @@ export class CommandBus {
       const input = parsed.data;
       matterIds = def.matterIds?.(input) ?? [];
       for (const id of matterIds) this.guardMatter(ctx, id);
+      if (!ctx.approvalId) await def.precheck?.(input, ctx);
 
       if (def.tier >= 2 && !ctx.approvalId) {
         const tier = def.tier as 2 | 3;
