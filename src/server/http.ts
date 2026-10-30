@@ -401,7 +401,8 @@ ${allowed ? "" : `<p><strong>${escapeHtml(pending.redirectHost)} is not on your 
         res.redirect(302, `/auth/login?returnTo=${encodeURIComponent(req.originalUrl)}`);
         return;
       }
-      res.sendFile(join(opts.webDir!, "index.html"), (err) => err && next(err));
+      // `root` keeps a dot directory above the web app (such as a checkout under .claude/) from being refused as a dotfile.
+      res.sendFile("index.html", { root: opts.webDir! }, (err) => err && next(err));
     });
   }
 

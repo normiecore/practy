@@ -2,6 +2,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { date, listCommands, money, SCHEME_LABEL, type CommandInfo } from "../api";
 import { CommandForm, type CommandFormProps } from "../command-form";
 import { Badge, href, Loading, Modal, TIER_LABEL, useAct, useLoad, Value } from "../ui";
+import { AuthorityForm } from "./authority-form";
+import { DamagesForm } from "./damages-form";
 
 const TABS: [string, string][] = [
   ["overview", "Overview"],
@@ -35,6 +37,40 @@ export function FormButton({ label, secondary, ...form }: CommandFormProps & { l
               form.onDone?.(out);
             }}
           />
+        </Modal>
+      )}
+    </>
+  );
+}
+
+/**
+ * A button that opens a purpose-built form in a dialog, with an "All fields" link to the generated
+ * form for the same command (for any input the purpose-built form does not show).
+ */
+function DedicatedFormButton({
+  label,
+  title = label,
+  wide,
+  disabled,
+  render,
+  ...fallback
+}: CommandFormProps & { label: string; title?: string; wide?: boolean; disabled?: boolean; render: (close: () => void) => ReactNode }) {
+  const [open, setOpen] = useState<"form" | "all">();
+  const close = () => setOpen(undefined);
+  return (
+    <>
+      {/* Disabled until the saved version has loaded, so the form never opens empty and stays that way. */}
+      <button disabled={disabled} onClick={() => setOpen("form")}>
+        {label}
+      </button>
+      {open && (
+        <Modal title={title} onClose={close} wide={wide}>
+          <p className="small" style={{ textAlign: "right", margin: 0 }}>
+            <button type="button" className="ghost" onClick={() => setOpen(open === "form" ? "all" : "form")}>
+              {open === "form" ? "All fields" : "Back to the form"}
+            </button>
+          </p>
+          {open === "form" ? render(close) : <CommandForm {...fallback} onDone={close} />}
         </Modal>
       )}
     </>
@@ -129,7 +165,7 @@ function MatterTab({ m, tab }: { m: MatterDetail; tab: string }) {
     case "chronology":
       return <Chronology matterId={m.id} />;
     case "damages":
-      return <Damages matterId={m.id} />;
+      return <Damages m={m} />;
     case "settlement":
       return <Settlement m={m} />;
     case "time":
@@ -640,7 +676,9 @@ interface StoredDamages {
   };
 }
 
-function Damages({ matterId }: { matterId: string }) {
+function Damages({ m }: { m: MatterDetail }) {
+  const matterId = m.id;
+  const client = m.parties.find((p) => p.role === "client")?.party;
   const dmg = useLoad<{ current: StoredDamages }>("get_damages", { matterId });
   const latest = dmg.data?.current;
   const fixed = { matterId };
@@ -648,7 +686,24 @@ function Damages({ matterId }: { matterId: string }) {
   return (
     <div className="stack">
       <div className="row">
-        <FormButton label={latest ? "New version" : "Compute damages"} name="compute_damages" fixed={fixed} initial={latest ? withoutMatter(latest.input) : undefined} />
+        <DedicatedFormButton
+          label={latest ? "New version" : "Compute damages"}
+          title={latest ? "Particulars of damages: new version" : "Particulars of damages"}
+          wide
+          disabled={dmg.data === undefined && !dmg.error}
+          name="compute_damages"
+          fixed={fixed}
+          initial={latest ? withoutMatter(latest.input) : undefined}
+          doneMessage="Damages saved as a new version"
+          render={(close) => (
+            <DamagesForm
+              matterId={matterId}
+              previous={latest?.input}
+              defaults={{ scheme: m.scheme, clientName: client?.name, dateOfBirth: client?.dateOfBirth, injuryDate: m.injuryDate }}
+              onDone={close}
+            />
+          )}
+        />
         {latest && <FormButton label="Particulars (docx)" secondary name="generate_particulars" fixed={fixed} initial={{ version: latest.version }} />}
         <FormButton label="Centrelink preclusion" secondary name="estimate_centrelink_preclusion" fixed={fixed} />
       </div>
@@ -736,12 +791,16 @@ function Settlement({ m }: { m: MatterDetail }) {
         title="Authority to Settle"
         actions={
           <>
-            <FormButton
+            <DedicatedFormButton
               label="Compute"
+              title="Authority to Settle"
+              wide
+              disabled={saved.data === undefined && !saved.error}
               name="compute_authority_to_settle"
               fixed={fixed}
               initial={authority ? withoutMatter(authority.input) : { clientName: client }}
               doneMessage="Authority to Settle saved as a new version"
+              render={(close) => <AuthorityForm matterId={m.id} previous={authority?.input} clientName={client} onDone={close} />}
             />
             {authority && <FormButton label="Generate document" secondary name="generate_authority_document" fixed={{ ...fixed, draftId: authority.id }} />}
           </>

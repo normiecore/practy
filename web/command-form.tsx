@@ -277,29 +277,52 @@ function Field({ name, schema: raw, value, required, onChange, patch }: FieldPro
   );
 }
 
-function NumberInput({ value, cents, integer, onChange }: { value: number | undefined; cents: boolean; integer: boolean; onChange: (v: number | undefined) => void }) {
+/** A number box that keeps partly typed text ("12.") and stores cents when asked. */
+export function NumberInput({
+  value,
+  cents,
+  integer,
+  onChange,
+  placeholder,
+  ariaLabel,
+}: {
+  value: number | undefined;
+  cents: boolean;
+  integer: boolean;
+  onChange: (v: number | undefined) => void;
+  placeholder?: string;
+  ariaLabel?: string;
+}) {
   const show = (v: number | undefined) => (v === undefined || v === null ? "" : cents ? (v / 100).toFixed(2) : String(v));
   const [text, setText] = useState(show(value));
   useEffect(() => {
-    const parsed = text === "" ? undefined : Number(text);
-    const asValue = parsed === undefined ? undefined : cents ? Math.round(parsed * 100) : parsed;
-    if (asValue !== value) setText(show(value));
+    // Only replace what the user is typing when the value changed from outside (prefill, reset).
+    const parsed = parseNumberText(text, cents, integer);
+    if (parsed !== null && parsed !== value) setText(show(value));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
   return (
     <input
       inputMode="decimal"
       value={text}
+      placeholder={placeholder}
+      aria-label={ariaLabel}
       onChange={(e) => {
-        const t = e.target.value.replace(/[$,\s]/g, "");
         setText(e.target.value);
-        if (t === "") return onChange(undefined);
-        const n = Number(t);
-        if (Number.isNaN(n)) return;
-        onChange(cents ? Math.round(n * 100) : integer ? Math.trunc(n) : n);
+        const n = parseNumberText(e.target.value, cents, integer);
+        if (n !== null) onChange(n);
       }}
     />
   );
+}
+
+/** "$150,000.50" → 15000050 cents. Returns undefined for blank and null while the text is not yet a number. */
+export function parseNumberText(text: string, cents: boolean, integer: boolean): number | undefined | null {
+  const t = text.replace(/[$,\s]/g, "");
+  if (t === "") return undefined;
+  const n = Number(t);
+  if (Number.isNaN(n)) return null;
+  return cents ? Math.round(n * 100) : integer ? Math.trunc(n) : n;
 }
 
 function JsonField({ title, hint, value, onChange }: { title: string; hint: ReactNode; value: unknown; onChange: (v: unknown) => void }) {

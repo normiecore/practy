@@ -4,4 +4,7 @@ dist/
 *.log
 .claude/worktrees/
 data/
+test-results/
+playwright/.auth/
+playwright-report/
 !.env.example

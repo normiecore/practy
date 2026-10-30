@@ -22,7 +22,8 @@ Requires Node 22+ (and Postgres 16 for persistence).
 
 ```bash
 npm install
-npm run check                     # typecheck (server + web) and tests
+npm run check                     # typecheck (server + web + e2e) and tests
+npm run test:e2e                  # browser tests: builds the web app and starts a server on :3100 (first run: npx playwright install chromium)
 PRACTY_DEV_LOGIN=1 PRACTY_BOOTSTRAP_ADMIN_EMAIL=you@example.com npm run dev   # API on :3000 (in-memory unless DATABASE_URL is set)
 npm run dev:web                   # web app on :5173, proxied to :3000
 npm run build && npm run start:prod

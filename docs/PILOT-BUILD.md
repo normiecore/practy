@@ -54,10 +54,10 @@ Firm templates (the Authority to Settle form and the letterhead) are **tenant as
 | 11 | Email filing pipeline: matching rules (matter number plus surname, thread history, party addresses), review queue, misc archive; a mode that drives the existing Apps Script through labels | ✅ done | `src/filing`; scheduled sweep wiring pending (#15) |
 | 12 | AI: model gateway (Anthropic API and Bedrock Sydney), in-app chat agent over the command registry, medical chronology with verified page citations, AI policy and consent | ✅ done | `src/ai`; chat streams over SSE at `/api/chat/:id/messages`; model id is configuration (`PRACTY_AI_MODEL`) |
 | 13 | Compliance: privacy requests (APP 12/13), breach register (NDB 30-day and ransomware 72-hour timers), ADM register and privacy-policy clause, AML intake screening, evidence-document flag, retention and legal hold, AI-use log export | ✅ done | `src/compliance` |
-| 14 | Web app (React): matters, matter workspace, approvals inbox, diary, filing review, documents, chronology, damages, settlement, trust, compliance, settings, chat | ✅ first version | `web/`. Hash routing; every screen calls the command API. `web/command-form.tsx` renders any command from its JSON Schema, so every command is usable in the app (matter "All actions" tab, "All commands" page) before it gets a bespoke screen. Smoke-tested in Chromium; no automated UI tests yet. `pilot/web` was never pushed, so this replaces it |
+| 14 | Web app (React): matters, matter workspace, approvals inbox, diary, filing review, documents, chronology, damages, settlement, trust, compliance, settings, chat | ✅ done | `web/`. Hash routing; every screen calls the command API. `web/command-form.tsx` renders any command from its JSON Schema, so every command is usable in the app (matter "All actions" tab, "All commands" page) before it gets a bespoke screen. Dedicated forms for damages and Authority to Settle; Playwright tests in CI. `pilot/web` was never pushed, so this replaces it |
 | 15 | Deploy: Dockerfile, docker-compose, AWS ap-southeast-2 guide, backups, onboarding runbook | ✅ done | `Dockerfile`, `docker-compose.yml`, `docs/DEPLOY.md`, `docs/ONBOARDING.md`; CI builds the image |
 
-## Pilot onboarding inputs needed from Soul Legal (not in repo)
+## Pilot onboarding inputs (gathered inside Soul Legal; never committed)
 - The Authority to Settle `.docx` and letterhead `.docx` (uploaded in Settings → Templates).
 - Staff list with fee-earner categories (SP / JP / C/PL) and roles.
 - Box: the enterprise app (Client Credentials Grant) and the PracticePanther root folder id.
@@ -78,16 +78,16 @@ Firm templates (the Authority to Settle form and the letterhead) are **tenant as
 - **No open PRs.** Everything is merged into `main` (normiecore/practy#1 to #3).
 - **Security review done and fixed:** `docs/SECURITY-REVIEW.md` lists the 14 findings (3 high), all fixed with tests (merged in normiecore/practy#3), plus the behaviour changes and residual risks the firm should know about. The penetration test is still outstanding.
 - **Repo is public** (made public so Actions runs free; private runs were blocked by account billing). Keep client data, firm templates and credentials out of it.
-- **Old branches:** `pilot/connectors`, `pilot/docgen`, `pilot/damages-costs` and `research/strategy-and-compliance` are merged into `main` and can be deleted.
-- **Onboarding request for Soul Legal:** drafted in `docs/ONBOARDING-REQUEST.md`, not yet sent.
+- **Old branches:** `pilot/connectors`, `pilot/docgen`, `pilot/damages-costs` and `research/strategy-and-compliance` are merged into `main` and can be deleted (agent sessions are not permitted to delete remote branches).
 
 ## Handover notes (keep current)
 - **Run locally:** see README → Development. Tests: `npm run check`. Include the Postgres test with `TEST_DATABASE_URL=postgres://…`.
 - **How to add a capability:** write a `defineCommand` in the module's `commands.ts`, register it in `src/server/app.ts`, and add a test. It then appears automatically in REST, MCP and the assistant.
 - **Branches:** `pilot/connectors`, `pilot/docgen`, `pilot/damages-costs` and `research/strategy-and-compliance` are all merged into `main`.
-- **Web app next steps:** bespoke forms for damages and Authority to Settle (they use the generated form today); Playwright smoke tests in CI.
+- **Browser tests:** `npm run test:e2e` (Playwright, `e2e/`) signs in, opens matters, confirms a key date through approvals, checks conflicts, damages, settlement and the dedicated forms, and visits every page; the CI `e2e` job runs it on every push.
+- **Web app next steps:** a read command for the firm's damages defaults (the damages form holds its own copy of Jongen 15%, contingencies 5% and interest 3%); server validation errors shown against the field rather than as a toast.
 - **Remaining before go-live:**
-  - the web app (#14): review with the firm, then the next steps above;
+  - the web app (#14): review with the firm's staff;
   - an independent security review, with fixes (internal review done: `docs/SECURITY-REVIEW.md`; an external review is still advisable);
   - a real-account trial of each connector (Box CCG, Gmail, Xero sandbox, PracticePanther);
   - verifying the rules on the register (STRATEGY §9);

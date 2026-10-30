@@ -10,8 +10,9 @@
   "scripts": {
     "dev": "tsx watch src/server/main.ts",
     "start": "tsx src/server/main.ts",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p web",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p web && tsc --noEmit -p e2e",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "check": "npm run typecheck && npm test",
     "dev:web": "vite",
     "build:web": "vite build",
@@ -37,6 +38,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@types/express": "^5.0.6",
     "@types/node": "^22.20.5",
     "@types/pg": "^8.23.1",
