@@ -33,6 +33,7 @@ describe("damages commands", () => {
     const { bus, matter } = await pilotBus();
     await expect(bus.execute("compute_damages", { matterId: matter.id, ...DAMAGES, jongenPercent: 10 }, as(users.solicitor))).rejects.toMatchObject({ code: "invalid" });
     await expect(bus.execute("get_damages", { matterId: matter.id }, as(users.outsider))).rejects.toMatchObject({ code: "not_found" });
+    await expect(bus.execute("get_authority_to_settle", { matterId: matter.id }, as(users.outsider))).rejects.toMatchObject({ code: "not_found" });
   });
 
   it("drafts the Authority to Settle with a settlement statement from recorded clearances", async () => {
@@ -57,6 +58,13 @@ describe("damages commands", () => {
     expect(a2.version).toBe(2);
     expect(a2.statement.lines[0]).toMatchObject({ kind: "medicare", amountCents: 120_000 });
     expect(a2.statement.clientBalanceCents).toBe(7_503_000 - 120_000 - 3_750_000);
+
+    const latest = await exec("get_authority_to_settle", { matterId: matter.id }, as(users.paralegal));
+    expect(latest.current.id).toBe(a2.id);
+    expect(latest.versions.map((v: any) => v.version)).toEqual([1, 2]);
+    expect(latest.versions[0]).toMatchObject({ totalOfferCents: 7_503_000, netInHandCents: 3_002_700 });
+    expect((await exec("get_authority_to_settle", { matterId: matter.id, version: 1 }, as(users.paralegal))).current.id).toBe(a1.id);
+    await expect(exec("get_authority_to_settle", { matterId: matter.id, version: 9 }, as(users.paralegal))).rejects.toMatchObject({ code: "not_found" });
   });
 
   it("tracks clearances and what blocks release", async () => {

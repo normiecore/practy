@@ -102,6 +102,14 @@ export function domainCommands(store: Store, policy: FirmPolicy = DEFAULT_FIRM_P
     return m;
   };
 
+  const confirmableKeyDate = (matterId: string, keyDateId: string): KeyDate => {
+    const kd = store.keyDates.get(keyDateId);
+    if (!kd || kd.matterId !== matterId) throw notFound("Key date");
+    if (kd.date === null) throw conflict("Enter the date before confirming");
+    if (kd.status === "dismissed") throw conflict("This key date was dismissed");
+    return kd;
+  };
+
   return [
     defineCommand({
       name: "create_matter",
@@ -351,10 +359,10 @@ export function domainCommands(store: Store, policy: FirmPolicy = DEFAULT_FIRM_P
       tier: 2,
       input: z.object({ matterId: z.string(), keyDateId: z.string() }),
       matterIds: (i) => [i.matterId],
+      // Refuse before the request reaches a practitioner's inbox, not only when it is approved.
+      precheck: ({ matterId, keyDateId }) => void confirmableKeyDate(matterId, keyDateId),
       handler: ({ matterId, keyDateId }, ctx) => {
-        const kd = store.keyDates.get(keyDateId);
-        if (!kd || kd.matterId !== matterId) throw notFound("Key date");
-        if (kd.date === null) throw conflict("Enter the date before confirming");
+        const kd = confirmableKeyDate(matterId, keyDateId);
         kd.status = "confirmed";
         kd.confirmedBy = ctx.actor.userId;
         kd.confirmedAt = new Date().toISOString();

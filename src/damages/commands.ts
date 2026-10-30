@@ -230,6 +230,24 @@ export function damagesCommands(store: Store) {
     }),
 
     defineCommand({
+      name: "get_authority_to_settle",
+      title: "Get Authority to Settle",
+      description: "The latest (or a given) saved Authority to Settle draft for a matter, with its settlement statement and the list of versions.",
+      tier: 0,
+      input: z.object({ matterId: z.string(), version: z.number().int().positive().optional() }),
+      matterIds: (i) => [i.matterId],
+      handler: ({ matterId, version }, ctx) => {
+        const all = authorities.list(ctx.actor.tenantId, (a) => a.matterId === matterId).sort((a, b) => a.version - b.version);
+        const current = version ? all.find((a) => a.version === version) : all.at(-1);
+        if (!current) throw notFound(version ? `Authority to Settle version ${version}` : "Authority to Settle");
+        return {
+          current,
+          versions: all.map((a) => ({ id: a.id, version: a.version, createdAt: a.createdAt, createdBy: a.createdBy, totalOfferCents: a.result.totalOfferCents, netInHandCents: a.result.netInHandCents })),
+        };
+      },
+    }),
+
+    defineCommand({
       name: "compute_authority_to_settle",
       title: "Compute Authority to Settle",
       description:

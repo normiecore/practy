@@ -131,7 +131,7 @@ label.check input { width: auto; }
 .chat form textarea { min-height: 2.6rem; height: 2.6rem; }
 
 .empty { text-align: center; color: var(--muted); padding: 2rem 1rem; }
-.kv { display: grid; grid-template-columns: max-content 1fr; gap: 0.3rem 1rem; }
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.3rem 1rem; }
 .kv dt { color: var(--muted); }
 .kv dd { margin: 0; }
 

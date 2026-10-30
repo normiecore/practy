@@ -2,7 +2,7 @@
 
 *This is the living plan. Update the status column in the same commit as the work, so anyone picking up (another account, another session) can continue from GitHub alone.*
 
-**Working branch:** `claude/upbeat-edison-fszgfn` (continues `research/strategy-and-compliance`)
+**Working branch:** `main` (all earlier branches are merged into it). Feature work goes on short branches with a PR into `main`.
 **Pilot:** Soul Legal (Perth/Baldivis). ICWA motor vehicle and WorkCover WA matters. Box stays the document store. Xero (or a trust add-on) stays the trust record during the shadow phase.
 
 ## Firm context discovered (from Soul Legal's existing Claude skills)
@@ -77,9 +77,8 @@ Firm templates (the Authority to Settle form and the letterhead) are **tenant as
 ## Handover notes (keep current)
 - **Run locally:** see README → Development. Tests: `npm run check`. Include the Postgres test with `TEST_DATABASE_URL=postgres://…`.
 - **How to add a capability:** write a `defineCommand` in the module's `commands.ts`, register it in `src/server/app.ts`, and add a test. It then appears automatically in REST, MCP and the assistant.
-- **Branches:** `pilot/connectors`, `pilot/docgen` and `pilot/damages-costs` are merged here. The web app was built on this branch.
-- **Web app next steps:** bespoke forms for damages and Authority to Settle (they use the generated form today); a stored-authority read command so the Settlement tab can show the last computed version after a reload; Playwright smoke tests in CI.
-- **Known gap:** `confirm_key_date` with an unknown key date id still creates an approval (no precheck before approval, unlike `send_email`).
+- **Branches:** `pilot/connectors`, `pilot/docgen`, `pilot/damages-costs` and `research/strategy-and-compliance` are all merged into `main`.
+- **Web app next steps:** bespoke forms for damages and Authority to Settle (they use the generated form today); Playwright smoke tests in CI.
 - **Remaining before go-live:**
   - the web app (#14): review with the firm, then the next steps above;
   - an independent security review, with fixes;
