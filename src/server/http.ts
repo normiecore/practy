@@ -331,6 +331,8 @@ export function createHttpServer(app: App, opts: HttpOptions) {
       page(
         "Connect AI client · Practy",
         `<h1>Connect ${escapeHtml(pending.clientName)} to Practy?</h1>
+<p>Access will be sent to <strong>${escapeHtml(pending.redirectHost)}</strong> (client ID <code>${escapeHtml(pending.clientId)}</code>).
+${pending.verified ? "" : "<strong>Unverified client:</strong> the name above was chosen by whoever registered it. Only allow this if you started the connection yourself and recognise that address."}</p>
 <p>It will act as <strong>${escapeHtml(s.user.displayName)}</strong> (${escapeHtml(s.user.email)}) and can read and draft on matters you can see.
 Legal-risk and trust actions still need approval in Practy. Matter data will be processed by the AI provider under your firm's plan.</p>
 ${enabled ? "" : '<p><strong>External AI clients are switched off for your firm.</strong> A principal can enable them in Settings.</p>'}

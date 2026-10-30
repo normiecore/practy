@@ -27,9 +27,14 @@ export function parseCookies(header: string | undefined): Record<string, string>
   return out;
 }
 
-/** Only same-origin relative paths are accepted as post-login destinations. */
+/**
+ * Only same-origin relative paths are accepted as post-login destinations: "/" or "/" followed by
+ * a character other than "/" or a backslash. Browsers read a backslash as a slash, so "/\evil" is refused,
+ * as is any value containing a backslash or a control character.
+ */
 export function safeReturnTo(v: unknown): string {
-  return typeof v === "string" && v.startsWith("/") && !v.startsWith("//") ? v : "/";
+  if (typeof v !== "string" || /[\\\u0000-\u001f\u007f]/.test(v)) return "/";
+  return v === "/" || /^\/[^/\\]/.test(v) ? v : "/";
 }
 
 export class AuthService {
