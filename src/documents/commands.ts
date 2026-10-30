@@ -101,6 +101,16 @@ export function documentCommands(store: Store, hub: IntegrationHub) {
     return { doc: d, bytes: await hub.requireDocuments(ctx.actor.tenantId).download(d.storeFileId) };
   };
 
+  /** Flags a derived copy inherits, so compiling or converting a document cannot launder an AI exclusion away. */
+  const inherited = (sources: MatterDocument[]): Partial<MatterDocument> => {
+    const excluded = sources.filter((d) => d.aiExcluded);
+    return {
+      derivedFrom: sources.map((d) => d.id),
+      ...(sources.some((d) => d.evidence) ? { evidence: true } : {}),
+      ...(excluded.length ? { aiExcluded: true, aiExcludedReason: excluded.map((d) => `${d.name}${d.aiExcludedReason ? `: ${d.aiExcludedReason}` : ""}`).join("; ") } : {}),
+    };
+  };
+
   return [
     defineCommand({
       name: "list_documents",
@@ -398,7 +408,10 @@ export function documentCommands(store: Store, hub: IntegrationHub) {
                 markPrefix,
                 annexures: pdfs.slice(1).map((p, i) => ({ description: label(i + 1), sources: [{ bytes: p.bytes }] })),
               });
-        const doc = await save(ctx, m, `${dotted(todayIso())} ${title}.pdf`.replace(/[\\/:*?"<>|]/g, "-"), result.bytes, "application/pdf", { docType: mode === "book" ? "Court book" : "Affidavit with annexures" });
+        const doc = await save(ctx, m, `${dotted(todayIso())} ${title}.pdf`.replace(/[\\/:*?"<>|]/g, "-"), result.bytes, "application/pdf", {
+          docType: mode === "book" ? "Court book" : "Affidavit with annexures",
+          ...inherited(pdfs.map((p) => p.doc)),
+        });
         return { document: doc, pages: result.pageCount, entries: result.entries };
       },
     }),
@@ -417,7 +430,7 @@ export function documentCommands(store: Store, hub: IntegrationHub) {
         if (!d || d.matterId !== matterId) throw notFound("Document");
         if (!d.name.toLowerCase().endsWith(".docx")) throw invalid("Only .docx files have tracked changes");
         const { bytes, report } = tracksToMarkup(await hub.requireDocuments(ctx.actor.tenantId).download(d.storeFileId));
-        const doc = await save(ctx, m, d.name.replace(/\.docx$/i, " (markup for filing).docx"), bytes, DOCX, { docType: d.docType, docDate: d.docDate });
+        const doc = await save(ctx, m, d.name.replace(/\.docx$/i, " (markup for filing).docx"), bytes, DOCX, { docType: d.docType, docDate: d.docDate, ...inherited([d]) });
         return { document: doc, report };
       },
     }),

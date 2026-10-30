@@ -87,4 +87,25 @@ describe("document workflow", () => {
     expect((await exec("list_documents", { matterId: matter.id })).length).toBe(6);
     expect(TENANT).toBe("t-soul");
   });
+
+  it("carries AI exclusion and evidence flags onto court books and markup copies", async () => {
+    const { exec, matter } = await setup();
+    const up = (name: string, bytes: Uint8Array, contentType: string) => exec("upload_document", { matterId: matter.id, name, base64: b64(bytes), contentType });
+    const privileged = await up("2026.01.01 Privileged advice.pdf", await pdf("Privileged"), "application/pdf");
+    const affidavit = await up("2026.10.30 Affidavit of Kevin.pdf", await pdf("Affidavit"), "application/pdf");
+    const draft = await up("2026.10.30 Statement.docx", makeDocx({ body: p(r("text")) }), "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    await exec("restrict_document_ai", { matterId: matter.id, documentId: privileged.id, reason: "privileged" });
+    await exec("mark_evidence_document", { matterId: matter.id, documentId: affidavit.id, evidence: true });
+
+    const book = await exec("build_court_book", { matterId: matter.id, mode: "book", title: "Book", documentIds: [affidavit.id, privileged.id] });
+    expect(book.document).toMatchObject({ aiExcluded: true, evidence: true, derivedFrom: [affidavit.id, privileged.id] });
+    expect(book.document.aiExcludedReason).toContain("privileged");
+    await expect(exec("build_chronology", { matterId: matter.id, documentId: book.document.id })).rejects.toMatchObject({ code: "forbidden", message: expect.stringContaining("excluded from AI") });
+
+    // Excluding a source later also excludes copies already made from it.
+    const markup = await exec("remove_tracked_changes", { matterId: matter.id, documentId: draft.id });
+    expect(markup.document.aiExcluded).toBeUndefined();
+    await exec("restrict_document_ai", { matterId: matter.id, documentId: draft.id, reason: "implied undertaking" });
+    expect(await exec("get_document", { matterId: matter.id, documentId: markup.document.id })).toMatchObject({ aiExcluded: true, derivedFrom: [draft.id] });
+  });
 });

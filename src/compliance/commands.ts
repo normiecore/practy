@@ -308,13 +308,25 @@ export function complianceCommands(store: Store, audit: AuditLog) {
     defineCommand({
       name: "restrict_document_ai",
       title: "Exclude a document from AI",
-      description: "Exclude a document from all AI processing (suppressed, privileged or implied-undertaking material).",
+      description: "Exclude a document from all AI processing (suppressed, privileged or implied-undertaking material). Chronology events already extracted from it are hidden from AI surfaces, and copies compiled from it inherit the exclusion.",
       tier: 1,
       input: z.object({ matterId: z.string(), documentId: z.string(), reason: z.string().min(1) }),
       matterIds: (i) => [i.matterId],
       handler: ({ matterId, documentId, reason }, ctx) => {
         const d = documentsOf(store).find(ctx.actor.tenantId, documentId);
         if (!d || d.matterId !== matterId) throw notFound("Document");
+        // Copies already compiled or converted from it (court books, markup copies) are excluded too.
+        const all = documentsOf(store).list(ctx.actor.tenantId, (x) => x.matterId === matterId);
+        const excluded = new Set([d.id]);
+        for (let grew = true; grew; ) {
+          grew = false;
+          for (const x of all) {
+            if (excluded.has(x.id) || !x.derivedFrom?.some((id) => excluded.has(id))) continue;
+            excluded.add(x.id);
+            grew = true;
+            if (!x.aiExcluded) documentsOf(store).set({ ...x, aiExcluded: true, aiExcludedReason: `derived from ${d.name}: ${reason}` });
+          }
+        }
         return documentsOf(store).set({ ...d, aiExcluded: true, aiExcludedReason: reason });
       },
     }),
