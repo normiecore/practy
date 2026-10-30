@@ -58,4 +58,40 @@ describe("compliance registers", () => {
     expect(log.toolCalls.map((c: any) => [c.surface, c.command])).toEqual([["mcp", "get_matter"]]);
     expect(TENANT).toBe("t-soul");
   });
+  it("keeps walled and no-AI matters out of the compliance lists", async () => {
+    const { app, exec, run } = setup();
+    const { matter: walled } = await openMatter(exec);
+    const { matter: noAi } = await openMatter(exec, { number: "SL-2001", title: "Citizen v Insurer", client: { name: "John Citizen" }, aiPermitted: false });
+    await exec("log_privacy_request", { kind: "access", requesterName: "Toni Priestley", matterId: walled.id, details: "Copy of my file", receivedOn: "2026-09-01" }, as(users.solicitor));
+    await exec("log_privacy_request", { kind: "access", requesterName: "John Citizen", matterId: noAi.id, details: "Copy of my file", receivedOn: "2026-09-01" }, as(users.solicitor));
+    app.store.matters.get(walled.id)!.restrictedTo = [users.solicitor.userId];
+
+    const aml = await exec("aml_status", {}, as(users.paralegal));
+    expect(aml.unscreened.map((m: any) => m.number)).toEqual(["SL-2001"]);
+    expect(aml.openMatters).toBe(1);
+    expect((await exec("aml_status", {}, as(users.solicitor, "mcp"))).unscreened.map((m: any) => m.number)).toEqual(["SL-1998"]);
+    expect((await exec("aml_status", {}, as(users.solicitor))).unscreened).toHaveLength(2);
+
+    expect((await exec<any[]>("list_privacy_requests", {}, as(users.paralegal))).map((r) => r.requesterName)).toEqual(["John Citizen"]);
+    expect((await exec<any[]>("list_privacy_requests", {}, as(users.solicitor, "agent"))).map((r) => r.requesterName)).toEqual(["Toni Priestley"]);
+    await expect(run("log_privacy_request", { kind: "other", requesterName: "X", matterId: walled.id, details: "x", receivedOn: "2026-09-01" }, as(users.paralegal))).rejects.toMatchObject({ code: "not_found" });
+
+    await exec("update_matter", { matterId: walled.id, status: "closed" }, as(users.solicitor));
+    expect(await exec<any[]>("retention_report", {}, as(users.principal))).toHaveLength(0);
+  });
+
+  it("does not let upsert_adm_entry overwrite another tenant's entry", async () => {
+    const { app, exec, run } = setup();
+    const adm = app.store.collection<any>("adm_entry");
+    adm.set({ id: "foreign", tenantId: users.outsider.tenantId, system: "Theirs", decisions: "d", personalInformation: "p", humanReview: "h", active: true, updatedAt: "2026-01-01T00:00:00.000Z" });
+    const entry = { id: "foreign", system: "Hijacked", decisions: "d", personalInformation: "p", humanReview: "h" };
+    await expect(run("upsert_adm_entry", entry, as(users.solicitor))).rejects.toMatchObject({ code: "not_found" });
+    expect(adm.get("foreign")).toMatchObject({ tenantId: users.outsider.tenantId, system: "Theirs" });
+
+    const own = await run("upsert_adm_entry", { ...entry, id: undefined, system: "Ours" }, as(users.solicitor));
+    if (own.status !== "pending_approval") throw new Error();
+    const done = await exec("decide_approval", { approvalId: own.approvalId, decision: "approve" }, as(users.principal));
+    expect(done.status).toBe("executed");
+    expect((await exec<any[]>("list_adm_register", {}, as(users.solicitor))).map((e) => e.system)).toContain("Ours");
+  });
 });

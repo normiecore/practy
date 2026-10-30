@@ -6,6 +6,7 @@ import type { AuditLog } from "../core/audit.js";
 import { addDays, addYears, type IsoDate } from "../core/calendar.js";
 import { conflict, notFound } from "../core/errors.js";
 import { defineCommand } from "../core/registry.js";
+import { visibleMatters } from "../domain/commands.js";
 import type { Store } from "../domain/store.js";
 import { documentsOf } from "../documents/model.js";
 
@@ -121,6 +122,11 @@ export function complianceCommands(store: Store, audit: AuditLog) {
     return DEFAULT_ADM.map((e, i) => adm.set({ ...e, id: `${tenantId}:adm:${i}`, tenantId, updatedAt: new Date().toISOString() }));
   };
 
+  const admOwned = (tenantId: string, id?: string) => {
+    // admFor seeds the default entries so their ids can be edited before the register is first listed.
+    if (id && !admFor(tenantId).some((e) => e.id === id)) throw notFound("Register entry");
+  };
+
   return [
     // ------------------------------------------------------------ APP 12/13 requests
     defineCommand({
@@ -136,6 +142,7 @@ export function complianceCommands(store: Store, audit: AuditLog) {
         details: z.string().min(1),
         receivedOn: z.iso.date(),
       }),
+      matterIds: (i) => (i.matterId ? [i.matterId] : []),
       handler: (input, ctx) =>
         requests.set({ ...input, id: randomUUID(), tenantId: ctx.actor.tenantId, dueBy: addDays(input.receivedOn, 30), status: "open", loggedBy: ctx.actor.userId }),
     }),
@@ -157,11 +164,13 @@ export function complianceCommands(store: Store, audit: AuditLog) {
       description: "Privacy requests with due dates and overdue flags.",
       tier: 0,
       input: z.object({ openOnly: z.boolean().default(true) }),
-      handler: ({ openOnly }, ctx) =>
-        requests
-          .list(ctx.actor.tenantId, (r) => !openOnly || r.status === "open")
+      handler: ({ openOnly }, ctx) => {
+        const visible = new Set(visibleMatters(store, ctx).map((m) => m.id));
+        return requests
+          .list(ctx.actor.tenantId, (r) => (!openOnly || r.status === "open") && (!r.matterId || visible.has(r.matterId)))
           .map((r) => ({ ...r, overdue: r.status === "open" && r.dueBy < today() }))
-          .sort((a, b) => a.dueBy.localeCompare(b.dueBy)),
+          .sort((a, b) => a.dueBy.localeCompare(b.dueBy));
+      },
     }),
 
     // ------------------------------------------------------------ NDB scheme and ransomware
@@ -254,7 +263,12 @@ export function complianceCommands(store: Store, audit: AuditLog) {
       tier: 2,
       approverRoles: ["principal"],
       input: z.object({ id: z.string().optional(), system: z.string().min(1), decisions: z.string().min(1), personalInformation: z.string().min(1), humanReview: z.string().min(1), active: z.boolean().default(true) }),
-      handler: ({ id, ...e }, ctx) => adm.set({ ...e, id: id ?? randomUUID(), tenantId: ctx.actor.tenantId, updatedAt: new Date().toISOString() }),
+      precheck: ({ id }, ctx) => admOwned(ctx.actor.tenantId, id),
+      handler: ({ id, ...e }, ctx) => {
+        // A caller-supplied id must name this tenant's entry, never another tenant's.
+        admOwned(ctx.actor.tenantId, id);
+        return adm.set({ ...e, id: id ?? randomUUID(), tenantId: ctx.actor.tenantId, updatedAt: new Date().toISOString() });
+      },
     }),
     defineCommand({
       name: "privacy_policy_adm_clause",
@@ -294,7 +308,7 @@ export function complianceCommands(store: Store, audit: AuditLog) {
       tier: 0,
       input: z.object({}),
       handler: (_i, ctx) => {
-        const open = store.matters.list(ctx.actor.tenantId, (m) => m.status === "open");
+        const open = visibleMatters(store, ctx).filter((m) => m.status === "open");
         return {
           questions: AML_QUESTIONS,
           openMatters: open.length,
@@ -369,8 +383,8 @@ export function complianceCommands(store: Store, audit: AuditLog) {
       roles: [...PRINCIPAL],
       input: z.object({}),
       handler: (_i, ctx) =>
-        store.matters
-          .list(ctx.actor.tenantId, (m) => m.status === "closed")
+        visibleMatters(store, ctx)
+          .filter((m) => m.status === "closed")
           .map((m) => {
             const closed = m.closedOn ?? m.openedOn;
             let notBefore = addYears(closed, 7).date;

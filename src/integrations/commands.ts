@@ -177,7 +177,9 @@ export function integrationCommands(deps: { store: Store; secrets: SecretStore; 
       handler: ({ days }, ctx) => {
         const today = new Date().toISOString().slice(0, 10);
         const horizon = new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
-        const matters = new Map(visibleMatters(store, ctx).filter((m) => m.status === "open").map((m) => [m.id, m]));
+        const visible = visibleMatters(store, ctx);
+        const visibleIds = new Set(visible.map((m) => m.id));
+        const matters = new Map(visible.filter((m) => m.status === "open").map((m) => [m.id, m]));
         const dates = store.keyDates.list(ctx.actor.tenantId, (k) => matters.has(k.matterId) && k.status !== "dismissed");
         const withMatter = (k: KeyDate) => ({ ...k, matterNumber: matters.get(k.matterId)!.number, matterTitle: matters.get(k.matterId)!.title });
         return {
@@ -187,7 +189,7 @@ export function integrationCommands(deps: { store: Store; secrets: SecretStore; 
           approvalsPending: bus.approvals.list(ctx.actor.tenantId, "pending").length,
           tasksDue: store
             .collection<{ id: string; tenantId: string; assigneeId: string; status: string; dueOn?: string; title: string; matterId?: string }>("task")
-            .list(ctx.actor.tenantId, (t) => t.assigneeId === ctx.actor.userId && t.status === "open" && !!t.dueOn && t.dueOn <= horizon)
+            .list(ctx.actor.tenantId, (t) => t.assigneeId === ctx.actor.userId && t.status === "open" && !!t.dueOn && t.dueOn <= horizon && (!t.matterId || visibleIds.has(t.matterId)))
             .sort((a, b) => a.dueOn!.localeCompare(b.dueOn!)),
           emailsToReview: store.collection<{ id: string; tenantId: string; userId: string; status: string }>("mail_item").list(ctx.actor.tenantId, (i) => i.userId === ctx.actor.userId && i.status === "review").length,
         };
