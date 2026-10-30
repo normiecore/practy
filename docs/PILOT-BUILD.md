@@ -74,9 +74,9 @@ Firm templates (the Authority to Settle form and the letterhead) are **tenant as
 5. **Release of funds:** should a known but unpaid charge block release of funds, or can it be paid from trust at the same time as the distribution?
 6. **Firm-specific values:** the Authority B(j) label ("<Firm> fees") and the fee-earner categories come from tenant settings and the user list, not code.
 
-## Current state (30 Oct 2026)
-- **Open PR:** normiecore/practy#3 (`claude/upbeat-edison-fszgfn` into `main`): key date precheck, `get_authority_to_settle`, Damages tab fix and the security fixes. Ready to merge once CI is green.
-- **Security review done and fixed:** `docs/SECURITY-REVIEW.md` lists the 14 findings (3 high), all fixed with tests on PR #3, plus the behaviour changes and residual risks the firm should know about. The penetration test is still outstanding.
+## Current state (30 Oct 2026, end of session)
+- **No open PRs.** Everything is merged into `main` (normiecore/practy#1 to #3).
+- **Security review done and fixed:** `docs/SECURITY-REVIEW.md` lists the 14 findings (3 high), all fixed with tests (merged in normiecore/practy#3), plus the behaviour changes and residual risks the firm should know about. The penetration test is still outstanding.
 - **Repo is public** (made public so Actions runs free; private runs were blocked by account billing). Keep client data, firm templates and credentials out of it.
 - **Old branches:** `pilot/connectors`, `pilot/docgen`, `pilot/damages-costs` and `research/strategy-and-compliance` are merged into `main` and can be deleted.
 - **Onboarding request for Soul Legal:** drafted in `docs/ONBOARDING-REQUEST.md`, not yet sent.
