@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { DevOidcProvider, DiscoveryOidcProvider, GOOGLE_ISSUER, microsoftIssuer, type OidcProvider } from "../auth/oidc.js";
 
 /** Runtime configuration from the environment. See docs/DEPLOY.md for every variable. */
@@ -59,7 +60,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     secretKey: env.PRACTY_SECRET_KEY,
     devLogin,
     production,
-    webDir: env.PRACTY_WEB_DIR ?? "dist/web",
+    webDir: resolve(env.PRACTY_WEB_DIR ?? "dist/web"),
     providers,
   };
 }
