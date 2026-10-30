@@ -116,10 +116,11 @@ export function domainCommands(store: Store, policy: FirmPolicy = DEFAULT_FIRM_P
         title: z.string().min(1),
         scheme: z.enum(SCHEMES),
         injuryDate: isoDate,
-        client: z.object({ name: z.string().min(1), dateOfBirth: isoDate.optional() }),
+        client: z.object({ name: z.string().min(1), dateOfBirth: isoDate.optional(), email: z.email().optional(), phone: z.string().optional(), address: z.string().optional() }),
         otherParties: z
-          .array(z.object({ name: z.string().min(1), role: z.enum(PARTY_ROLES).exclude(["client"]), kind: z.enum(["person", "organisation"]).default("person") }))
+          .array(z.object({ name: z.string().min(1), role: z.enum(PARTY_ROLES).exclude(["client"]), kind: z.enum(["person", "organisation"]).default("person"), email: z.email().optional() }))
           .default([]),
+        references: z.array(z.string()).default([]),
         responsibleUserId: z.string().optional(),
         aiPermitted: z.boolean().default(true),
         boxFolderId: z.string().optional(),
@@ -130,12 +131,12 @@ export function domainCommands(store: Store, policy: FirmPolicy = DEFAULT_FIRM_P
           throw conflict(`Matter number ${input.number} already exists`);
         }
         const conflicts = conflictSearch(store, ctx, [input.client.name, ...input.otherParties.map((p) => p.name)]);
-        const mkParty = (name: string, kind: Party["kind"], dateOfBirth?: string): Party => {
-          const p: Party = { id: randomUUID(), tenantId, name, kind, ...(dateOfBirth ? { dateOfBirth } : {}) };
-          store.parties.set(p);
-          return p;
+        const mkParty = (name: string, kind: Party["kind"], extra: Partial<Party> = {}): Party => {
+          const p: Party = { id: randomUUID(), tenantId, name, kind, ...extra, ...(extra.email ? { email: extra.email.toLowerCase() } : {}) };
+          return store.parties.set(p);
         };
-        const client = mkParty(input.client.name, "person", input.client.dateOfBirth);
+        const { name: _n, ...clientExtra } = input.client;
+        const client = mkParty(input.client.name, "person", clientExtra);
         const matter: Matter = {
           id: randomUUID(),
           tenantId,
@@ -147,8 +148,9 @@ export function domainCommands(store: Store, policy: FirmPolicy = DEFAULT_FIRM_P
           openedOn: today(),
           parties: [
             { partyId: client.id, role: "client" },
-            ...input.otherParties.map((p) => ({ partyId: mkParty(p.name, p.kind).id, role: p.role })),
+            ...input.otherParties.map((p) => ({ partyId: mkParty(p.name, p.kind, p.email ? { email: p.email } : {}).id, role: p.role })),
           ],
+          references: input.references,
           responsibleUserId: input.responsibleUserId ?? ctx.actor.userId,
           aiPermitted: input.aiPermitted,
           links: input.boxFolderId ? { boxFolderId: input.boxFolderId } : {},
@@ -156,6 +158,58 @@ export function domainCommands(store: Store, policy: FirmPolicy = DEFAULT_FIRM_P
         store.matters.set(matter);
         const keyDates = applyEvent(store, matter, { type: "matter_opened" }, policy);
         return { matter, conflicts, keyDates };
+      },
+    }),
+
+    defineCommand({
+      name: "update_matter",
+      title: "Update matter",
+      description: "Change a matter's title, status, references (action/claim numbers), responsible user or Box folder link.",
+      tier: 1,
+      roles: [...STAFF],
+      input: z.object({
+        matterId: z.string(),
+        title: z.string().min(1).optional(),
+        status: z.enum(["open", "closed"]).optional(),
+        references: z.array(z.string()).optional(),
+        responsibleUserId: z.string().optional(),
+        boxFolderId: z.string().optional(),
+      }),
+      matterIds: (i) => [i.matterId],
+      handler: ({ matterId, boxFolderId, status, ...rest }) => {
+        const m = getMatter(matterId);
+        const next: Matter = { ...m, ...Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined)) };
+        if (boxFolderId) next.links = { ...m.links, boxFolderId };
+        if (status && status !== m.status) {
+          next.status = status;
+          next.closedOn = status === "closed" ? today() : undefined;
+        }
+        return store.matters.set(next);
+      },
+    }),
+
+    defineCommand({
+      name: "add_party",
+      title: "Add a party",
+      description: "Add a person or organisation to a matter (defendant, insurer, employer, driver, witness, other). Runs a conflict search on the name.",
+      tier: 1,
+      roles: [...STAFF],
+      input: z.object({
+        matterId: z.string(),
+        name: z.string().min(1),
+        role: z.enum(PARTY_ROLES).exclude(["client"]),
+        kind: z.enum(["person", "organisation"]).default("person"),
+        email: z.email().optional(),
+        phone: z.string().optional(),
+        address: z.string().optional(),
+      }),
+      matterIds: (i) => [i.matterId],
+      handler: ({ matterId, role, ...p }, ctx) => {
+        const m = getMatter(matterId);
+        const conflicts = conflictSearch(store, ctx, [p.name], matterId);
+        const party = store.parties.set({ id: randomUUID(), tenantId: m.tenantId, ...p, ...(p.email ? { email: p.email.toLowerCase() } : {}) });
+        store.matters.set({ ...m, parties: [...m.parties, { partyId: party.id, role }] });
+        return { party, conflicts };
       },
     }),
 

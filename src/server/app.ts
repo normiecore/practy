@@ -11,6 +11,9 @@ import { AgentService, agentCommands } from "../ai/agent.js";
 import { ChronologyService, chronologyCommands } from "../ai/chronology.js";
 import { ClaudeGateway, type ChatModel } from "../ai/gateway.js";
 import type { MatterDocument } from "../documents/model.js";
+import type { MailMessage } from "../connectors/types.js";
+import { FilingService, filingCommands } from "../filing/service.js";
+import { IntegrationHub } from "../integrations/hub.js";
 import { domainCommands, matterGuard } from "../domain/commands.js";
 import { Store } from "../domain/store.js";
 import { TrustService, trustCommands } from "../trust/commands.js";
@@ -22,6 +25,8 @@ export interface App {
   secrets: SecretStore;
   agent: AgentService;
   chronology: ChronologyService;
+  hub: IntegrationHub;
+  filing: FilingService;
 }
 
 export interface AppOptions {
@@ -33,6 +38,9 @@ export interface AppOptions {
   chatModel?: (tenantId: string) => ChatModel;
   /** Reads document bytes from the firm's document store. */
   loadDocumentBytes?: (doc: MatterDocument) => Promise<Uint8Array>;
+  hub?: IntegrationHub;
+  /** Renders an email to PDF for filing. */
+  renderEmailPdf?: (m: MailMessage) => Promise<Uint8Array>;
 }
 
 /** Composition root: one registry and one bus shared by the web app, REST API, MCP server and agents. */
@@ -46,15 +54,23 @@ export function createApp(opts: AppOptions = {}): App {
       const ai = settingsFor(store, tenantId).ai;
       return new ClaudeGateway({ provider: ai.provider, model: ai.model, awsRegion: process.env.PRACTY_AWS_REGION });
     });
-  const loadBytes = opts.loadDocumentBytes ?? (async () => {
-    throw new Error("No document store is configured");
-  });
+  const hub = opts.hub ?? new IntegrationHub();
+  const loadBytes = opts.loadDocumentBytes ?? ((doc: MatterDocument) => hub.requireDocuments(doc.tenantId).download(doc.storeFileId));
+  const filing = new FilingService(
+    store,
+    hub,
+    opts.renderEmailPdf ??
+      (async () => {
+        throw new Error("Email rendering is not configured");
+      }),
+  );
   const chronology = new ChronologyService(store, chatModel, loadBytes);
   const registry = new Registry().register(
     ...adminCommands(store),
     ...domainCommands(store),
     ...trustCommands(store, trust),
     ...chronologyCommands(chronology),
+    ...filingCommands(filing),
   );
   const audit = new AuditLog(undefined, (entry) =>
     store.queue.enqueue(() => store.queue.persistence.appendAudit(entry)),
@@ -68,7 +84,7 @@ export function createApp(opts: AppOptions = {}): App {
   );
   const agent = new AgentService(store, bus, chatModel);
   registry.register(...agentCommands(agent));
-  return { store, trust, bus, secrets, agent, chronology };
+  return { store, trust, bus, secrets, agent, chronology, hub, filing };
 }
 
 /** Opens an app over durable storage, restoring the working set and the audit chain. */

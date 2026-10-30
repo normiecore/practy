@@ -13,6 +13,9 @@ export interface Party {
   name: string;
   kind: "person" | "organisation";
   dateOfBirth?: IsoDate;
+  email?: string;
+  phone?: string;
+  address?: string;
 }
 
 export interface Matter {
@@ -31,7 +34,14 @@ export interface Matter {
   /** Ethical wall: if set, only these users can see the matter. */
   restrictedTo?: string[];
   /** Pointers into connected systems; Practy is the hub (MCP-FIRST.md §1.5). */
-  links: { boxFolderId?: string; xeroContactId?: string; xeroTrackingOption?: string };
+  links: { boxFolderId?: string; xeroContactId?: string; xeroTrackingOption?: string; externalId?: string };
+  /** Court action numbers, insurer claim numbers etc. Used for email matching. */
+  references?: string[];
+  /** Legal hold suspends retention-based destruction. */
+  legalHold?: { on: boolean; reason: string; setBy: string; setAt: string };
+  closedOn?: IsoDate;
+  /** AML/CTF designated-service screening result at intake. */
+  amlScreening?: { designatedService: boolean; answers: Record<string, boolean>; screenedBy: string; screenedAt: string };
 }
 
 export type KeyDateStatus = "proposed" | "confirmed" | "manual_required" | "dismissed";
