@@ -7,6 +7,8 @@
  *   importers/practicepanther.ts, importers/csv.ts
  */
 
+import type { Scheme } from "../domain/model.js";
+
 export interface ConnectorDeps {
   getAccessToken: () => Promise<string>;
   fetch?: typeof fetch;
@@ -110,7 +112,7 @@ export interface MailQuery {
   since?: string;
   /** Provider-native query (Gmail search syntax / Graph $search). */
   q?: string;
-  /** Gmail label name or Outlook folder name. */
+  /** Gmail label name or Outlook category (labels map to categories, as in addLabel). */
   label?: string;
   max?: number;
 }
@@ -168,6 +170,8 @@ export interface ImportedMatter {
   title: string;
   /** Raw matter type / practice area text from the source system. */
   matterType?: string;
+  /** Pilot scheme recognised from the matter type, when it is one Practy has rules for. */
+  scheme?: Scheme;
   status: "open" | "closed";
   openedOn?: string;
   injuryDate?: string;
