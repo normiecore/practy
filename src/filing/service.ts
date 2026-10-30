@@ -4,7 +4,8 @@ import { settingsFor } from "../admin/settings.js";
 import { NameConflictError, type DocumentStore, type FileRef, type MailMessage } from "../connectors/types.js";
 import { conflict, invalid, notFound } from "../core/errors.js";
 import { defineCommand } from "../core/registry.js";
-import type { Actor } from "../core/types.js";
+import type { Actor, InvocationContext } from "../core/types.js";
+import { matterGuard, visibleMatters } from "../domain/commands.js";
 import type { Matter } from "../domain/model.js";
 import type { Store } from "../domain/store.js";
 import { matterFolderId } from "../documents/folders.js";
@@ -32,6 +33,8 @@ export interface MailItem {
   filedVia?: "practy" | "label_bridge";
   filedBy?: string;
   filedAt?: string;
+  /** Filed by the sweep rather than a person; its sender is then not a trusted correspondent. */
+  autoFiled?: boolean;
   documentIds?: string[];
   error?: string;
 }
@@ -89,8 +92,9 @@ export class FilingService {
     this.cursors = store.collection<Cursor>("mail_cursor");
   }
 
-  index(tenantId: string): MatterIndexEntry[] {
-    return this.store.mattersFor(tenantId).map((m) => {
+  /** Matters the mailbox owner may see in the app; walled matters are never matched, named or filed into. */
+  index(actor: Actor): MatterIndexEntry[] {
+    return visibleMatters(this.store, { actor, surface: "ui" }).map((m) => {
       const parties = m.parties.map((l) => ({ ...l, party: this.store.parties.get(l.partyId) }));
       const client = parties.find((p) => p.role === "client")?.party;
       return {
@@ -121,7 +125,7 @@ export class FilingService {
     const since = opts.since ?? this.cursors.get(cursorId)?.since ?? new Date(Date.now() - 3 * 86_400_000).toISOString();
     const startedAt = new Date().toISOString();
     const ids = await mail.listMessages({ since, max: opts.max ?? 500 });
-    const index = this.index(actor.tenantId);
+    const index = this.index(actor);
     const cfg = { firmDomains: this.firmDomains(actor.tenantId, mailbox), ...DEFAULT_MISC };
     const result: SweepResult = { processed: 0, filed: 0, review: 0, misc: 0, errors: 0, capReached: false };
 
@@ -149,7 +153,7 @@ export class FilingService {
             result.review++;
             continue;
           }
-          item = await this.file(actor, item, d.matterId!, msg);
+          item = await this.file(actor, item, d.matterId!, msg, true);
           result.filed++;
         } else if (d.decision === "misc") result.misc++;
         else result.review++;
@@ -166,7 +170,8 @@ export class FilingService {
   }
 
   /** Files one item to a matter (automatic or a human's choice from the review queue). */
-  async file(actor: Actor, item: MailItem, matterId: string, msg?: MailMessage): Promise<MailItem> {
+  async file(actor: Actor, item: MailItem, matterId: string, msg?: MailMessage, autoFiled = false): Promise<MailItem> {
+    matterGuard(this.store)({ actor, surface: "ui" }, matterId);
     const matter = this.store.matters.find(actor.tenantId, matterId);
     if (!matter) throw notFound("Matter");
     const settings = settingsFor(this.store, actor.tenantId);
@@ -176,7 +181,7 @@ export class FilingService {
     if (settings.mail.filingMode === "label_bridge") {
       await mail.addLabel(item.messageId, `${settings.mail.refileLabelPrefix}${matter.number}`);
       this.threads.set({ id: `${actor.tenantId}:${item.threadId}`, tenantId: actor.tenantId, matterId });
-      return this.items.set({ ...item, matterId, status: "filed", filedVia: "label_bridge", filedBy: actor.userId, filedAt: new Date().toISOString() });
+      return this.items.set({ ...item, matterId, status: "filed", filedVia: "label_bridge", filedBy: actor.userId, filedAt: new Date().toISOString(), autoFiled });
     }
 
     const docs = this.hub.requireDocuments(actor.tenantId);
@@ -210,7 +215,7 @@ export class FilingService {
     this.threads.set({ id: `${actor.tenantId}:${item.threadId}`, tenantId: actor.tenantId, matterId });
     return this.items.set({
       ...item, matterId, status: duplicates === files.length ? "duplicate" : "filed", filedVia: "practy", filedBy: actor.userId,
-      filedAt: new Date().toISOString(), documentIds,
+      filedAt: new Date().toISOString(), autoFiled, documentIds,
     });
   }
 
@@ -241,7 +246,10 @@ export class FilingService {
   }
 }
 
-/** Addresses an outbound email may go to: parties on the matter and anyone already corresponding on it. */
+/**
+ * Addresses an outbound email may go to: parties on the matter and anyone whose mail a person
+ * filed to it. Automatically filed mail does not count: anyone can put a client's surname in a subject.
+ */
 export function allowedRecipients(svc: FilingService, tenantId: string, matterId: string): Set<string> {
   const m = svc.store.matters.find(tenantId, matterId);
   const out = new Set<string>();
@@ -249,7 +257,7 @@ export function allowedRecipients(svc: FilingService, tenantId: string, matterId
     const e = svc.store.parties.get(l.partyId)?.email;
     if (e) out.add(e.toLowerCase());
   }
-  for (const i of svc.items.list(tenantId, (i) => i.matterId === matterId && i.status === "filed")) if (i.from) out.add(i.from.toLowerCase());
+  for (const i of svc.items.list(tenantId, (i) => i.matterId === matterId && i.status === "filed" && !i.autoFiled)) if (i.from) out.add(i.from.toLowerCase());
   return out;
 }
 
@@ -258,6 +266,23 @@ export function filingCommands(svc: FilingService) {
     const allowed = allowedRecipients(svc, tenantId, matterId);
     const blocked = addresses.filter((a) => !allowed.has(a.toLowerCase()));
     if (blocked.length) throw invalid(`Not a party or correspondent on this matter: ${blocked.join(", ")}. Add them as a party first.`);
+  };
+  /** Matter documents to attach, resolved before approval so the approver sees names rather than ids. */
+  const attachmentsOf = (tenantId: string, matterId: string, ids: string[]) =>
+    ids.map((id) => {
+      const d = documentsOf(svc.store).find(tenantId, id);
+      if (!d || d.matterId !== matterId) throw notFound(`Document ${id}`);
+      return d;
+    });
+  /** Queue items as a surface may see them: nothing tied to a matter hidden there (walls, no-AI). */
+  const forSurface = (ctx: InvocationContext, items: MailItem[]) => {
+    const visible = new Set(visibleMatters(svc.store, ctx).map((m) => m.id));
+    return items.flatMap((i) => {
+      if (i.matterId && !visible.has(i.matterId)) return [];
+      const candidates = i.candidates.filter((c) => visible.has(c));
+      // Evidence may name a hidden candidate (surname, matter number), so it goes with them.
+      return [candidates.length === i.candidates.length ? i : { ...i, candidates, evidence: [] }];
+    });
   };
   const own = (tenantId: string, userId: string, id: string) => {
     const item = svc.items.find(tenantId, id);
@@ -282,8 +307,7 @@ export function filingCommands(svc: FilingService) {
       tier: 0,
       input: z.object({ status: z.enum(["review", "filed", "misc", "dismissed", "duplicate", "error"]).default("review"), limit: z.number().int().positive().max(500).default(100) }),
       handler: ({ status, limit }, ctx) =>
-        svc.items
-          .list(ctx.actor.tenantId, (i) => i.userId === ctx.actor.userId && i.status === status)
+        forSurface(ctx, svc.items.list(ctx.actor.tenantId, (i) => i.userId === ctx.actor.userId && i.status === status))
           .sort((a, b) => b.date.localeCompare(a.date))
           .slice(0, limit),
     }),
@@ -317,15 +341,19 @@ export function filingCommands(svc: FilingService) {
         attachDocumentIds: z.array(z.string()).default([]),
       }),
       matterIds: (i) => [i.matterId],
-      precheck: ({ matterId, to, cc }, ctx) => checkRecipients(ctx.actor.tenantId, matterId, [...to, ...cc]),
+      precheck: ({ matterId, to, cc, attachDocumentIds }, ctx) => {
+        checkRecipients(ctx.actor.tenantId, matterId, [...to, ...cc]);
+        attachmentsOf(ctx.actor.tenantId, matterId, attachDocumentIds);
+      },
+      describe: ({ matterId, attachDocumentIds }, ctx) => ({
+        attachments: attachmentsOf(ctx.actor.tenantId, matterId, attachDocumentIds).map((d) => ({ id: d.id, name: d.name, category: d.category })),
+      }),
       handler: async ({ matterId, to, cc, subject, body, attachDocumentIds }, ctx) => {
         checkRecipients(ctx.actor.tenantId, matterId, [...to, ...cc]);
         const mail = svc.hub.mail(ctx.actor.tenantId, ctx.actor.userId);
         if (!mail) throw conflict("Connect your mailbox first (Settings → Integrations)");
         const attachments = [];
-        for (const id of attachDocumentIds) {
-          const d = documentsOf(svc.store).find(ctx.actor.tenantId, id);
-          if (!d || d.matterId !== matterId) throw notFound(`Document ${id}`);
+        for (const d of attachmentsOf(ctx.actor.tenantId, matterId, attachDocumentIds)) {
           attachments.push({ filename: d.name, contentType: d.contentType, bytes: await svc.hub.requireDocuments(ctx.actor.tenantId).download(d.storeFileId) });
         }
         const sent = await mail.send({ to: to.map((email) => ({ email })), cc: cc.map((email) => ({ email })), subject, text: body, attachments });
