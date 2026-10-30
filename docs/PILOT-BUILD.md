@@ -54,8 +54,8 @@ Firm templates (the Authority to Settle form and the letterhead) are **tenant as
 | 11 | Email filing pipeline: matching rules (matter number plus surname, thread history, party addresses), review queue, misc archive; a mode that drives the existing Apps Script through labels | ✅ done | `src/filing`; scheduled sweep wiring pending (#15) |
 | 12 | AI: model gateway (Anthropic API and Bedrock Sydney), in-app chat agent over the command registry, medical chronology with verified page citations, AI policy and consent | ✅ done | `src/ai`; chat streams over SSE at `/api/chat/:id/messages`; model id is configuration (`PRACTY_AI_MODEL`) |
 | 13 | Compliance: privacy requests (APP 12/13), breach register (NDB 30-day and ransomware 72-hour timers), ADM register and privacy-policy clause, AML intake screening, evidence-document flag, retention and legal hold, AI-use log export | ✅ done | `src/compliance` |
-| 14 | Web app (React): matters, matter workspace, approvals inbox, diary, filing review, documents, chronology, damages, settlement, trust, compliance, settings, chat | ⏳ | `web/` |
-| 15 | Deploy: Dockerfile, docker-compose, AWS ap-southeast-2 guide, backups, onboarding runbook | ⏳ | |
+| 14 | Web app (React): matters, matter workspace, approvals inbox, diary, filing review, documents, chronology, damages, settlement, trust, compliance, settings, chat | 🚧 in progress | parallel agent on branch `pilot/web`; scaffold, API client and design tokens on this branch |
+| 15 | Deploy: Dockerfile, docker-compose, AWS ap-southeast-2 guide, backups, onboarding runbook | ✅ done | `Dockerfile`, `docker-compose.yml`, `docs/DEPLOY.md`, `docs/ONBOARDING.md`; CI builds the image |
 
 ## Pilot onboarding inputs needed from Soul Legal (not in repo)
 - The Authority to Settle `.docx` and letterhead `.docx` (uploaded in Settings → Templates).
@@ -73,3 +73,14 @@ Firm templates (the Authority to Settle form and the letterhead) are **tenant as
 4. **Centrelink preclusion:** does the period run from the injury date or from when weekly payments stopped? Are part weeks dropped?
 5. **Release of funds:** should a known but unpaid charge block release of funds, or can it be paid from trust at the same time as the distribution?
 6. **Firm-specific values:** the Authority B(j) label ("<Firm> fees") and the fee-earner categories come from tenant settings and the user list, not code.
+
+## Handover notes (keep current)
+- **Run locally:** see README → Development. Tests: `npm run check`. Include the Postgres test with `TEST_DATABASE_URL=postgres://…`.
+- **How to add a capability:** write a `defineCommand` in the module's `commands.ts`, register it in `src/server/app.ts`, and add a test. It then appears automatically in REST, MCP and the assistant.
+- **Branches:** `pilot/connectors`, `pilot/docgen` and `pilot/damages-costs` are merged here. `pilot/web` merges when done.
+- **Remaining before go-live:**
+  - the web app (#14);
+  - an independent security review, with fixes;
+  - a real-account trial of each connector (Box CCG, Gmail, Xero sandbox, PracticePanther);
+  - verifying the rules on the register (STRATEGY §9);
+  - a pen test.
