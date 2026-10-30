@@ -5,6 +5,8 @@ A web-based, AI-native practice management platform for law firms. Pilot firm: S
 ## Docs
 
 - [Strategy, compliance and architecture](docs/STRATEGY.md): start here
+- [MCP-first architecture](docs/architecture/MCP-FIRST.md)
+- [Design-partner terms](docs/DESIGN-PARTNER.md)
 - Research notes:
   - [01 Market landscape](docs/research/01-market-landscape.md)
   - [02 Australia / WA compliance](docs/research/02-compliance-australia-wa.md)

@@ -134,8 +134,8 @@ Detail is in [research/03](research/03-compliance-global.md). These are the deci
 │ Postgres (row-level security per tenant) · object store (WORM for audit/trust) │
 │ per-tenant/matter vector namespaces · KMS (per-tenant keys, BYOK)              │
 │ ───────────────────────────────────────────────────────────────────────────── │
-│ Connectors: Gmail/Google Calendar, Outlook/M365, Box (first DMS), DocuSign,      │
-│   bank feeds, Xero (office), Services Australia forms, eCourts PDF/A bundles     │
+│ Connectors: Box (DMS of record), Gmail/Google Calendar, Xero (office + trust     │
+│   mirror → shadow ledger), DocuSign, Services Australia forms, eCourts PDF/A     │
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -144,6 +144,7 @@ Key choices and why:
 - **Event-sourced trust ledger.** Immutability, reversal-only correction, three-way reconciliation and examiner exports come built in.
 - **Rules as data.** Thresholds and scales change every 1 July, the Uniform Law changes flow in from Victoria, and new countries can be added without code forks.
 - **Structured "fact objects" with provenance.** Each fact links to its document and page (the approach used by Mary Technology and Filevine). This is what makes AI output checkable and reusable across particulars, briefs and settlement.
+- **MCP and chat as a main way of working.** One command registry generates the UI actions, REST API and MCP tools, with approval tiers (money actions can never run through MCP). Details in [architecture/MCP-FIRST.md](architecture/MCP-FIRST.md).
 - **Connector-first document strategy.** Keep Box and Gmail for the pilot so there is no migration risk. Offer native storage later.
 - **AI inference in Australia.** Use an AU-region hosted model endpoint, for example Claude via a Sydney-region cloud deployment [verify model availability per region]. A provider-agnostic gateway allows switching.
 
@@ -153,9 +154,9 @@ Key choices and why:
 
 | Phase | When | Scope | Exit criteria |
 |---|---|---|---|
-| **0. Foundations** | Nov–Dec 2026 | Tenancy, auth/MFA/SSO, audit log, rule-pack engine, model gateway, Box and Gmail connectors. **ADM register and privacy-policy clause for Soul Legal before 10 Dec 2026** | Security baseline. Data residency evidenced |
-| **1. Pilot MVP** (~12 weeks) | Jan–Mar 2027 | Matter core plus conflict index; email filing and naming with review queue; key-dates engine (ICWA, WorkCover, SRC, District Court, NOPB) with Calendar sync and daily digest; medical chronology with citations; damages model → particulars and **Authority to Settle with clearances**; document assembly (Form 17, affidavits, letterhead). Time capture runs passively from day 1 | ≥95% filing accuracy after review; zero missed key dates; measured hours saved per stage |
-| **2. Money** | Q2 2027 | Uniform Law trust ledger (or integration with the incumbent ledger first, then replacement); costs-disclosure engine; scale billing; bill of costs and timesheet reconstruction; AML screening | Clean external examination on parallel run |
+| **0. Foundations** | Nov–Dec 2026 | Tenancy, auth/MFA/SSO, audit log, command registry + remote MCP server (read tools first), rule-pack engine, model gateway (AU inference), Box, Gmail and Xero connectors. **ADM register and privacy-policy clause for Soul Legal before 10 Dec 2026** | Security baseline. Data residency evidenced |
+| **1. Pilot MVP** (~12 weeks) | Jan–Mar 2027 | ICWA motor vehicle and WorkCover only. Matter core plus conflict index; Xero-fed shadow trust ledger; email filing and naming with review queue; key-dates engine (ICWA, WorkCover, SRC, District Court, NOPB) with Calendar sync and daily digest; medical chronology with citations; damages model → particulars and **Authority to Settle with clearances**; document assembly (Form 17, affidavits, letterhead). Time capture runs passively from day 1 | ≥95% filing accuracy after review; zero missed key dates; measured hours saved per stage |
+| **2. Money** | Q2 2027 | Trust ledger parallel run, then switch-over from Xero (Xero stays the office ledger); costs-disclosure engine; scale billing; bill of costs and timesheet reconstruction; AML module (screening for Soul Legal, full reporting mode available) | Clean external examination on parallel run |
 | **3. Client** | Q3 2027 | Client portal, e-sign, intake assistant (web, then voice), medico-legal pipeline with funder tracking | Fewer status calls; intake conversion up |
 | **4. Scale** | 2028 | Second and third AU PI firms; other states' rule packs (NSW, Vic, Qld, including Qld PIPA advertising rules); NZ, then UK cells; ISO 27001 and SOC 2 | Multi-tenant production |
 
@@ -176,11 +177,20 @@ Key choices and why:
 - Availability of the chosen LLM in the AU region; whether Clio's advanced AI runs offshore (competitive claim).
 - Unverified market figures (Harvey's late-2026 round, Legora Series E, EveOS date, Finch and Precedent funding).
 
-## 10. Decisions needed from Soul Legal
+## 10. Decisions log
 
-1. **Trust accounting:** which package is used today? Integrate with it for the pilot, or build ours to run in parallel?
-2. **Document store:** Box stays the system of record for the pilot (recommended)?
-3. **Pilot users and matters:** who are the fee earners, and which matter types go first (recommended: ICWA motor vehicle and WorkCover)?
-4. **Baseline metrics:** a sample of timesheets so we can measure hours saved per stage.
-5. **AI consent:** wording in the costs agreement and client disclosure about AI use (we can draft it).
-6. **Commercial model:** design-partner terms (for example, Soul Legal's skills and templates become product IP in exchange for free or discounted use and a revenue share, similar to the A&O Shearman–Harvey arrangement).
+| # | Decision | Date | Source |
+|---|---|---|---|
+| D1 | **Trust/office accounting:** Soul Legal uses **Xero**. Integrate first, run a shadow trust ledger in parallel, and switch over only after clean reconciliations and an examiner review. Xero is **not** on the Law Society of NSW list of certified trust packages, so Practy's own ledger becomes the trust record of truth. See [MCP-FIRST §6](architecture/MCP-FIRST.md) | 30 Oct 2026 | Soul Legal |
+| D2 | **Box remains the document system of record.** Practy links each matter to one Box folder and writes Box metadata | 30 Oct 2026 | Soul Legal |
+| D3 | **MCP and chat are a main way of working, not an add-on.** One command layer drives UI, API and MCP, with approval tiers. Practy runs a remote MCP server; Soul Legal's existing skills move into server-side prompts. See [MCP-FIRST](architecture/MCP-FIRST.md) | 30 Oct 2026 | Soul Legal |
+| D4 | **Pilot matter types:** ICWA motor vehicle claims and WorkCover WA | 30 Oct 2026 | Soul Legal |
+| D5 | **Privacy Act and AML/CTF are built to full standard.** This holds even though Soul Legal (PI-only, turnover not disclosed) may be exempt or out of scope. Full APP compliance and a complete AML/CTF module (customer due diligence, sanctions and politically-exposed-person checks, suspicious matter reports, program templates). The module is **switchable**: Soul Legal runs in "not a reporting entity" mode with screening and drift alerts; larger firms switch to reporting mode. Optional client ID checks before settlement payouts, for fraud protection | 30 Oct 2026 | Soul Legal |
+| D6 | **Soul Legal does no non-PI work.** On current Law Council guidance it is outside AML/CTF, but drift alerts stay on | 30 Oct 2026 | Soul Legal |
+| D7 | **Design-partner terms:** recommended Option C (milestone-vested equity, founding-customer pricing, IP licence or assignment, DPA). See [DESIGN-PARTNER](DESIGN-PARTNER.md) | 30 Oct 2026 | Recommendation, pending sign-off |
+
+### Still open
+- Does the trust account sit in Xero itself, or in a Xero add-on (e.g. InTouch)?
+- Pilot fee earners and a baseline timesheet sample.
+- Who owns Practy (Soul Legal principals vs a separate founding team)? This decides whether Option C or D applies.
+- Wording of the client AI-use consent in the costs agreement.
