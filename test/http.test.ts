@@ -49,6 +49,12 @@ describe("REST with dev tokens", () => {
     expect(list.find((c: any) => c.name === "create_matter").inputSchema.type).toBe("object");
     const bad = await fetch(`${base}/api/commands/get_matter`, { method: "POST", headers: { Authorization: "Bearer tok", "Content-Type": "application/json" }, body: JSON.stringify({ matterId: "nope" }) });
     expect(bad.status).toBe(404);
+    const invalid = await fetch(`${base}/api/commands/create_task`, { method: "POST", headers: { Authorization: "Bearer tok", "Content-Type": "application/json" }, body: JSON.stringify({ title: 7, dueOn: "next week" }) });
+    expect(invalid.status).toBe(400);
+    const body = await invalid.json();
+    expect(body.error).toBe("invalid");
+    // Each problem is located by its path so a form can show it beside the field.
+    expect(body.issues.map((i: any) => i.path).sort()).toEqual(["dueOn", "title"]);
   });
 });
 

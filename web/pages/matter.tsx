@@ -3,7 +3,7 @@ import { date, listCommands, money, SCHEME_LABEL, type CommandInfo } from "../ap
 import { CommandForm, type CommandFormProps } from "../command-form";
 import { Badge, href, Loading, Modal, TIER_LABEL, useAct, useLoad, Value } from "../ui";
 import { AuthorityForm } from "./authority-form";
-import { DamagesForm } from "./damages-form";
+import { DamagesForm, type FirmDamagesDefaults } from "./damages-form";
 
 const TABS: [string, string][] = [
   ["overview", "Overview"],
@@ -680,6 +680,7 @@ function Damages({ m }: { m: MatterDetail }) {
   const matterId = m.id;
   const client = m.parties.find((p) => p.role === "client")?.party;
   const dmg = useLoad<{ current: StoredDamages }>("get_damages", { matterId });
+  const firm = useLoad<FirmDamagesDefaults>("get_damages_defaults", {});
   const latest = dmg.data?.current;
   const fixed = { matterId };
   const missing = dmg.error && /not found/i.test(dmg.error);
@@ -690,7 +691,7 @@ function Damages({ m }: { m: MatterDetail }) {
           label={latest ? "New version" : "Compute damages"}
           title={latest ? "Particulars of damages: new version" : "Particulars of damages"}
           wide
-          disabled={dmg.data === undefined && !dmg.error}
+          disabled={(dmg.data === undefined && !dmg.error) || !firm.data}
           name="compute_damages"
           fixed={fixed}
           initial={latest ? withoutMatter(latest.input) : undefined}
@@ -700,6 +701,7 @@ function Damages({ m }: { m: MatterDetail }) {
               matterId={matterId}
               previous={latest?.input}
               defaults={{ scheme: m.scheme, clientName: client?.name, dateOfBirth: client?.dateOfBirth, injuryDate: m.injuryDate }}
+              firm={firm.data!}
               onDone={close}
             />
           )}

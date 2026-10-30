@@ -174,3 +174,5 @@ label.field > span.hint { display: block; font-weight: 400; font-size: 0.8rem; m
   .rows-table td.cell-money input, .rows-table td.cell-number input { text-align: left; }
   .rows-table td.cell-remove { text-align: right; }
 }
+.field-error { display: block; color: var(--danger); font-size: 0.8rem; margin-top: 0.15rem; }
+[aria-invalid="true"] { border-color: var(--danger); }

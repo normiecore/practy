@@ -1,6 +1,6 @@
 /** Shared UI pieces: routing, toasts, data loading, modals and a generic value renderer. */
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { ApiError, command, date, money, run, type CommandResult } from "./api";
+import { ApiError, command, date, money, run, type CommandResult, type InputIssue } from "./api";
 
 // ------------------------------------------------------------ routing (hash based, so the server needs no route table)
 
@@ -95,7 +95,7 @@ export function useLoad<T = any>(name: string | null, input: unknown = {}): Load
 export function useAct() {
   const toast = useToast();
   return useCallback(
-    async <T = any,>(name: string, input: unknown, done?: string): Promise<CommandResult<T> | undefined> => {
+    async <T = any,>(name: string, input: unknown, done?: string, onIssues?: (issues: InputIssue[]) => void): Promise<CommandResult<T> | undefined> => {
       try {
         const out = await command<T>(name, input);
         if (out.status === "pending_approval") {
@@ -108,7 +108,11 @@ export function useAct() {
         notifyChanged();
         return out;
       } catch (err) {
-        toast(err instanceof ApiError ? err.message : String(err), true);
+        // A form that can place each problem beside its field takes them; the toast then just points there.
+        if (onIssues && err instanceof ApiError && err.issues.length) {
+          onIssues(err.issues);
+          toast("Some entries need attention: see the highlighted fields", true);
+        } else toast(err instanceof ApiError ? err.message : String(err), true);
         return undefined;
       }
     },

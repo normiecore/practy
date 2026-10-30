@@ -68,7 +68,9 @@ export class CommandBus {
         throw forbidden(`${name} requires one of: ${def.roles.join(", ")}`);
       }
       const parsed = def.input.safeParse(rawInput ?? {});
-      if (!parsed.success) throw invalid(z.prettifyError(parsed.error));
+      if (!parsed.success) {
+        throw invalid(z.prettifyError(parsed.error), parsed.error.issues.map((i) => ({ path: i.path.map(String).join("."), message: i.message })));
+      }
       const input = parsed.data;
       matterIds = def.matterIds?.(input) ?? [];
       for (const id of matterIds) this.guardMatter(ctx, id);

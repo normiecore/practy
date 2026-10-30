@@ -85,7 +85,7 @@ Firm templates (the Authority to Settle form and the letterhead) are **tenant as
 - **How to add a capability:** write a `defineCommand` in the module's `commands.ts`, register it in `src/server/app.ts`, and add a test. It then appears automatically in REST, MCP and the assistant.
 - **Branches:** `pilot/connectors`, `pilot/docgen`, `pilot/damages-costs` and `research/strategy-and-compliance` are all merged into `main`.
 - **Browser tests:** `npm run test:e2e` (Playwright, `e2e/`) signs in, opens matters, confirms a key date through approvals, checks conflicts, damages, settlement and the dedicated forms, and visits every page; the CI `e2e` job runs it on every push.
-- **Web app next steps:** a read command for the firm's damages defaults (the damages form holds its own copy of Jongen 15%, contingencies 5% and interest 3%); server validation errors shown against the field rather than as a toast.
+- **Forms and validation:** the damages form takes the firm's standing parameters from `get_damages_defaults` (blank means the firm default, so a later rule change is not frozen into saved versions). Invalid input comes back with an `issues` list of `{ path, message }`, which the dedicated forms show beside the field or table row concerned.
 - **Remaining before go-live:**
   - the web app (#14): review with the firm's staff;
   - an independent security review, with fixes (internal review done: `docs/SECURITY-REVIEW.md`; an external review is still advisable);

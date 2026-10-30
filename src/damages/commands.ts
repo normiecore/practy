@@ -16,6 +16,7 @@ import {
 } from "./clearances.js";
 import { auditDamages, computeDamages, type AuditWarning, type DamagesInput, type DamagesModel } from "./engine.js";
 import { fmtDate } from "./money.js";
+import { DAMAGES_DEFAULTS } from "./tables.js";
 import { computeAuthority, computeSettlementStatement, type AuthorityInput, type AuthorityResult, type SettlementStatement } from "./settlement.js";
 
 const isoDate = z.iso.date();
@@ -209,6 +210,23 @@ export function damagesCommands(store: Store) {
         };
         return models.set(stored);
       },
+    }),
+
+    defineCommand({
+      name: "get_damages_defaults",
+      title: "Damages defaults",
+      description:
+        "The firm's standing damages parameters (Jongen discount and its allowed range, contingencies, interest, the weekly divisor and working-life age), each with its source. compute_damages uses these for any parameter left out.",
+      tier: 0,
+      input: z.object({}),
+      handler: () => ({
+        jongenPercent: DAMAGES_DEFAULTS.jongenPercent,
+        jongenRange: { ...DAMAGES_DEFAULTS.jongenRange, value: [...DAMAGES_DEFAULTS.jongenRange.value] },
+        contingencyPercent: DAMAGES_DEFAULTS.contingencyPercent,
+        interestPercent: DAMAGES_DEFAULTS.interestPercent,
+        weeklyDivisor: { ...DAMAGES_DEFAULTS.weeklyDivisorHundredths, value: DAMAGES_DEFAULTS.weeklyDivisorHundredths.value / 100 },
+        workingLifeAge: DAMAGES_DEFAULTS.workingLifeAge,
+      }),
     }),
 
     defineCommand({

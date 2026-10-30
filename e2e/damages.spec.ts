@@ -96,3 +96,32 @@ test("the damages and Authority to Settle forms save what a solicitor types", as
   const authority = await runCommand<{ current: { input: { settlementOfferCents: number; legalCostsCents: number } } }>(request, "get_authority_to_settle", { matterId: matter.id });
   expect(authority.current.input).toMatchObject({ settlementOfferCents: 15_000_000, legalCostsCents: 3_750_050 });
 });
+
+test("shows the server's objection beside the line item it is about", async ({ page, request }) => {
+  const matter = await createMatter(request, {
+    number: matterNumber("ERR"),
+    title: "Errors test v ICWA",
+    client: clientName(),
+    clientDateOfBirth: "1990-05-01",
+    injuryDate: "2025-03-14",
+  });
+  await page.goto(`/#/matters/${matter.id}/damages`);
+  await page.getByRole("button", { name: "Compute damages" }).click();
+  const dmg = page.getByRole("dialog", { name: "Particulars of damages" });
+  await dmg.getByRole("combobox", { name: /Sex/ }).selectOption("female");
+  await dmg.getByLabel("Gross weekly").first().fill("1553");
+  await dmg.getByLabel("Life expectancy").first().fill("45.1");
+  await dmg.getByLabel("Life expectancy source").fill("ABS Life Tables, Western Australia, 2022 to 2024");
+  const specials = dmg.getByRole("group", { name: "Special damages" });
+  // Row 1 stays blank (dropped before sending); row 2 has an amount but no provider or item.
+  await specials.getByRole("button", { name: "Add item" }).click();
+  await specials.getByRole("button", { name: "Add item" }).click();
+  await specials.getByLabel("Amount, row 2").fill("120");
+  await dmg.getByRole("button", { name: "Compute damages" }).click();
+
+  await expect(dmg).toBeVisible();
+  const row2 = specials.getByRole("row").nth(2);
+  await expect(row2.getByRole("alert").first()).toBeVisible();
+  await expect(specials.getByRole("row").nth(1).getByRole("alert")).toHaveCount(0);
+  await expect(dmg.getByText(/Special damages, row 2, provider payer/)).toBeVisible();
+});
