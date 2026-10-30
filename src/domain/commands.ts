@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { MatterGuard } from "../core/bus.js";
-import { conflict, notFound } from "../core/errors.js";
+import { conflict, invalid, notFound } from "../core/errors.js";
 import { defineCommand } from "../core/registry.js";
 import { AI_SURFACES, type InvocationContext } from "../core/types.js";
 import { CONFLICT_THRESHOLD, nameSimilarity } from "./conflicts.js";
 import { PARTY_ROLES, SCHEMES, type KeyDate, type Matter, type Party } from "./model.js";
 import { DEFAULT_FIRM_POLICY, RULE_PACK_VERSION, proposeKeyDates, type FirmPolicy, type MatterEvent } from "./rules/wa-pi.js";
 import type { Store } from "./store.js";
+import type { DocumentStore } from "../connectors/types.js";
+import { checkMatterFolderLink } from "../documents/folders.js";
 
 const isoDate = z.iso.date();
 const today = () => new Date().toISOString().slice(0, 10);
@@ -95,11 +97,24 @@ function applyEvent(store: Store, matter: Matter, event: MatterEvent, policy: Fi
 
 const STAFF = ["principal", "solicitor", "paralegal"] as const;
 
-export function domainCommands(store: Store, policy: FirmPolicy = DEFAULT_FIRM_POLICY) {
+/**
+ * Matter numbers name the matter's folder (`<number> - <client> - <scheme>`), so they are
+ * trimmed and limited to letters, digits, ".", "_" and "-": no spaces, so no " - ".
+ */
+export const MATTER_NUMBER = /^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/;
+const matterNumber = z.string().trim().regex(MATTER_NUMBER, "Matter number: letters, digits, '.', '_' or '-', no spaces");
+
+export function domainCommands(store: Store, policy: FirmPolicy = DEFAULT_FIRM_POLICY, documents: (tenantId: string) => DocumentStore | null = () => null) {
   const getMatter = (id: string) => {
     const m = store.matters.get(id);
     if (!m) throw notFound(`Matter ${id}`);
     return m;
+  };
+  /** A Box folder link is accepted only for the matter's own folder in the matters root. */
+  const checkBoxFolder = async (m: Pick<Matter, "id" | "tenantId" | "number">, folderId: string) => {
+    const ds = documents(m.tenantId);
+    if (ds?.kind !== "box") throw invalid("Box is not connected, so a Box folder cannot be linked");
+    await checkMatterFolderLink(store, ds, m, folderId);
   };
 
   const confirmableKeyDate = (matterId: string, keyDateId: string): KeyDate => {
@@ -120,7 +135,7 @@ export function domainCommands(store: Store, policy: FirmPolicy = DEFAULT_FIRM_P
       roles: [...STAFF],
       resultMatterIds: (r: { matter: Matter }) => [r.matter.id],
       input: z.object({
-        number: z.string().min(1),
+        number: matterNumber,
         title: z.string().min(1),
         scheme: z.enum(SCHEMES),
         injuryDate: isoDate.optional(),
@@ -133,11 +148,13 @@ export function domainCommands(store: Store, policy: FirmPolicy = DEFAULT_FIRM_P
         aiPermitted: z.boolean().default(true),
         boxFolderId: z.string().optional(),
       }),
-      handler: (input, ctx) => {
+      handler: async (input, ctx) => {
         const tenantId = ctx.actor.tenantId;
         if (store.matterByNumber(tenantId, input.number)) {
           throw conflict(`Matter number ${input.number} already exists`);
         }
+        const id = randomUUID();
+        if (input.boxFolderId) await checkBoxFolder({ id, tenantId, number: input.number }, input.boxFolderId);
         const conflicts = conflictSearch(store, ctx, [input.client.name, ...input.otherParties.map((p) => p.name)]);
         const mkParty = (name: string, kind: Party["kind"], extra: Partial<Party> = {}): Party => {
           const p: Party = { id: randomUUID(), tenantId, name, kind, ...extra, ...(extra.email ? { email: extra.email.toLowerCase() } : {}) };
@@ -146,7 +163,7 @@ export function domainCommands(store: Store, policy: FirmPolicy = DEFAULT_FIRM_P
         const { name: _n, ...clientExtra } = input.client;
         const client = mkParty(input.client.name, "person", clientExtra);
         const matter: Matter = {
-          id: randomUUID(),
+          id,
           tenantId,
           number: input.number,
           title: input.title,
@@ -184,8 +201,9 @@ export function domainCommands(store: Store, policy: FirmPolicy = DEFAULT_FIRM_P
         boxFolderId: z.string().optional(),
       }),
       matterIds: (i) => [i.matterId],
-      handler: ({ matterId, boxFolderId, status, ...rest }) => {
+      handler: async ({ matterId, boxFolderId, status, ...rest }) => {
         const m = getMatter(matterId);
+        if (boxFolderId && boxFolderId !== m.links.boxFolderId) await checkBoxFolder(m, boxFolderId);
         const next: Matter = { ...m, ...Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined)) };
         if (boxFolderId) next.links = { ...m.links, boxFolderId };
         if (status && status !== m.status) {
@@ -357,12 +375,22 @@ export function domainCommands(store: Store, policy: FirmPolicy = DEFAULT_FIRM_P
       description:
         "Confirm a proposed key date so it is diarised. Legal-risk action: requires practitioner approval in Practy.",
       tier: 2,
-      input: z.object({ matterId: z.string(), keyDateId: z.string() }),
+      input: z.object({
+        matterId: z.string(),
+        keyDateId: z.string(),
+        /** The date under review. Filled in from the key date when the request is made; approval confirms only this date. */
+        date: isoDate.optional(),
+      }),
       matterIds: (i) => [i.matterId],
-      // Refuse before the request reaches a practitioner's inbox, not only when it is approved.
-      precheck: ({ matterId, keyDateId }) => void confirmableKeyDate(matterId, keyDateId),
-      handler: ({ matterId, keyDateId }, ctx) => {
+      // Refuse before the request reaches a practitioner's inbox, and record the date under review.
+      precheck: (input) => {
+        const kd = confirmableKeyDate(input.matterId, input.keyDateId);
+        if (input.date !== undefined && input.date !== kd.date) throw conflict(`The key date is ${kd.date}, not ${input.date}`);
+        input.date = kd.date ?? undefined;
+      },
+      handler: ({ matterId, keyDateId, date }, ctx) => {
         const kd = confirmableKeyDate(matterId, keyDateId);
+        if (kd.date !== date) throw conflict(`The key date changed to ${kd.date} after confirmation of ${date ?? "an empty date"} was requested; request confirmation again`);
         kd.status = "confirmed";
         kd.confirmedBy = ctx.actor.userId;
         kd.confirmedAt = new Date().toISOString();

@@ -1,3 +1,4 @@
+import { isMatterFolderFor } from "../src/connectors/documents/naming.js";
 import { NameConflictError, type DocumentStore, type FileRef, type FolderRef, type MailAttachment, type MailMessage, type MailQuery, type MailSource, type MatterFolderSpec, type OutgoingMail } from "../src/connectors/types.js";
 
 /** In-memory DocumentStore with the same never-overwrite semantics as Box. */
@@ -8,8 +9,12 @@ export class FakeDocumentStore implements DocumentStore {
   private seq = 0;
 
   async findMatterFolder(number: string): Promise<FolderRef | null> {
-    const hits = [...this.folders].filter(([, f]) => f.parent === "root" && f.name.startsWith(`${number} - `));
+    const hits = [...this.folders].filter(([, f]) => f.parent === "root" && isMatterFolderFor(f.name, number));
     return hits.length === 1 ? { id: hits[0]![0], name: hits[0]![1].name } : null;
+  }
+  async getMatterFolder(folderId: string, number: string) {
+    const f = this.folders.get(folderId);
+    return f && f.parent === "root" && isMatterFolderFor(f.name, number) ? { id: folderId, name: f.name } : null;
   }
   async ensureMatterFolder(spec: MatterFolderSpec) {
     return (await this.findMatterFolder(spec.number)) ?? this.ensureSubfolder("root", `${spec.number} - ${spec.clientSortName} - ${spec.schemeLabel}`);

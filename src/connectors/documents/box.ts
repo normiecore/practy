@@ -7,7 +7,7 @@ import {
   type FolderRef,
   type MatterFolderSpec,
 } from "../types.js";
-import { assertItemName, matterFolderName } from "./naming.js";
+import { assertItemName, isMatterFolderFor, matterFolderName } from "./naming.js";
 
 /**
  * Box Content API v2.0 document store.
@@ -78,13 +78,23 @@ export class BoxDocumentStore implements DocumentStore {
     let matches = await this.searchMatterFolders(spec.number);
     if (matches.length === 0) {
       const { folders } = await this.listFolder(this.opts.mattersRootFolderId);
-      matches = folders.filter((f) => f.name.startsWith(`${spec.number.trim()} - `));
+      matches = folders.filter((f) => isMatterFolderFor(f.name, spec.number));
     }
     if (matches.length > 1) {
       throw new Error(`Several Box folders are numbered ${spec.number}: ${matches.map((m) => m.name).join("; ")}`);
     }
     if (matches[0]) return matches[0];
     return this.createFolder(this.opts.mattersRootFolderId, matterFolderName(spec));
+  }
+
+  /** Fetches the folder and accepts it only as a direct child of the matters root named for `number`. */
+  async getMatterFolder(folderId: string, number: string): Promise<FolderRef | null> {
+    if (!folderId || folderId === this.opts.mattersRootFolderId) return null;
+    const res = await this.http.raw(`/folders/${enc(folderId)}?fields=id,type,name,parent`, { allow: [404] });
+    if (res.status === 404) return null;
+    const item = (await res.json()) as BoxItem;
+    if (item.type !== "folder" || item.parent?.id !== this.opts.mattersRootFolderId || !isMatterFolderFor(item.name, number)) return null;
+    return folderRef(item);
   }
 
   ensureSubfolder(parentId: string, name: string): Promise<FolderRef> {
@@ -161,7 +171,6 @@ export class BoxDocumentStore implements DocumentStore {
   private async searchMatterFolders(number: string): Promise<FolderRef[]> {
     const n = number.trim();
     if (!n) return [];
-    const prefix = `${n} - `;
     const root = this.opts.mattersRootFolderId;
     const found: FolderRef[] = [];
     for (let page = 0, offset = 0; page < SEARCH_MAX_PAGES; page++) {
@@ -176,7 +185,7 @@ export class BoxDocumentStore implements DocumentStore {
       });
       const res = await this.http.json<{ entries: BoxItem[]; total_count: number }>(`/search?${params}`);
       for (const item of res.entries) {
-        if (item.type === "folder" && item.parent?.id === root && item.name.startsWith(prefix)) found.push(folderRef(item));
+        if (item.type === "folder" && item.parent?.id === root && isMatterFolderFor(item.name, n)) found.push(folderRef(item));
       }
       offset += res.entries.length;
       if (res.entries.length === 0 || offset >= res.total_count) break;
