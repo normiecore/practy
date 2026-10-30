@@ -184,7 +184,7 @@ export function createHttpServer(app: App, opts: HttpOptions) {
     try {
       res.json(await app.bus.execute(String(req.params.name), req.body, r));
     } catch (err) {
-      if (err instanceof PractyError) res.status(STATUS[err.code]).json({ error: err.code, message: err.message });
+      if (err instanceof PractyError) res.status(STATUS[err.code]).json({ error: err.code, message: err.message, ...(err.issues ? { issues: err.issues } : {}) });
       else {
         console.error(err);
         res.status(500).json({ error: "internal", message: "Unexpected error" });
@@ -193,7 +193,7 @@ export function createHttpServer(app: App, opts: HttpOptions) {
   });
 
   const apiError = (res: Response, err: unknown) => {
-    if (err instanceof PractyError) res.status(STATUS[err.code]).json({ error: err.code, message: err.message });
+    if (err instanceof PractyError) res.status(STATUS[err.code]).json({ error: err.code, message: err.message, ...(err.issues ? { issues: err.issues } : {}) });
     else res.status(500).json({ error: "internal", message: (err as Error).message });
   };
 

@@ -2,49 +2,69 @@
  * Small controlled inputs for purpose-built forms: labelled text, date, money and number fields,
  * and an editable table of line items. Money is held as integer cents and typed in dollars.
  */
-import type { ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
+import type { InputIssue } from "./api";
 import { NumberInput } from "./command-form";
+
+/** Server problems keyed by input path (rows numbered as displayed), so each field can show its own. */
+export const IssuesContext = createContext<Record<string, string>>({});
+
+function FieldError({ path }: { path?: string }) {
+  const message = useContext(IssuesContext)[path ?? ""];
+  return path && message ? (
+    <span className="field-error" role="alert">
+      {message}
+    </span>
+  ) : null;
+}
+const useInvalid = (path?: string) => (useContext(IssuesContext)[path ?? ""] ? true : undefined);
 
 interface FieldBase {
   label: string;
   hint?: ReactNode;
+  /** Where this value sits in the command input, e.g. "preInjuryEarnings.grossWeeklyCents". */
+  path?: string;
 }
 
-export function TextField({ label, hint, value, onChange, placeholder, long }: FieldBase & { value: string | undefined; onChange: (v: string) => void; placeholder?: string; long?: boolean }) {
+export function TextField({ label, hint, path, value, onChange, placeholder, long }: FieldBase & { value: string | undefined; onChange: (v: string) => void; placeholder?: string; long?: boolean }) {
+  const invalid = useInvalid(path);
   return (
     <label className="field">
       <span>{label}</span>
       {long ? (
-        <textarea value={value ?? ""} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+        <textarea aria-invalid={invalid} value={value ?? ""} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
       ) : (
-        <input value={value ?? ""} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+        <input aria-invalid={invalid} value={value ?? ""} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
       )}
       {hint && <span className="hint">{hint}</span>}
+      <FieldError path={path} />
     </label>
   );
 }
 
-export function DateField({ label, hint, value, onChange }: FieldBase & { value: string | undefined; onChange: (v: string) => void }) {
+export function DateField({ label, hint, path, value, onChange }: FieldBase & { value: string | undefined; onChange: (v: string) => void }) {
   return (
     <label className="field">
       <span>{label}</span>
-      <input type="date" value={value ?? ""} onChange={(e) => onChange(e.target.value)} />
+      <input type="date" aria-invalid={useInvalid(path)} value={value ?? ""} onChange={(e) => onChange(e.target.value)} />
       {hint && <span className="hint">{hint}</span>}
+      <FieldError path={path} />
     </label>
   );
 }
 
-export function MoneyField({ label, hint, value, onChange, placeholder }: FieldBase & { value: number | null | undefined; onChange: (v: number | undefined) => void; placeholder?: string }) {
+export function MoneyField({ label, hint, path, value, onChange, placeholder }: FieldBase & { value: number | null | undefined; onChange: (v: number | undefined) => void; placeholder?: string }) {
   return (
     <label className="field">
       <span>{label} ($)</span>
       <NumberInput value={value ?? undefined} cents integer onChange={onChange} placeholder={placeholder} />
       {hint && <span className="hint">{hint}</span>}
+      <FieldError path={path} />
     </label>
   );
 }
 
-export function NumberField({ label, hint, value, onChange, placeholder, suffix }: FieldBase & { value: number | undefined; onChange: (v: number | undefined) => void; placeholder?: string; suffix?: string }) {
+export function NumberField({ label, hint, path, value, onChange, placeholder, suffix }: FieldBase & { value: number | undefined; onChange: (v: number | undefined) => void; placeholder?: string; suffix?: string }) {
   return (
     <label className="field">
       <span>
@@ -53,15 +73,16 @@ export function NumberField({ label, hint, value, onChange, placeholder, suffix 
       </span>
       <NumberInput value={value} cents={false} integer={false} onChange={onChange} placeholder={placeholder} />
       {hint && <span className="hint">{hint}</span>}
+      <FieldError path={path} />
     </label>
   );
 }
 
-export function SelectField({ label, hint, value, onChange, options, blank }: FieldBase & { value: string | undefined; onChange: (v: string | undefined) => void; options: [string, string][]; blank?: string }) {
+export function SelectField({ label, hint, path, value, onChange, options, blank }: FieldBase & { value: string | undefined; onChange: (v: string | undefined) => void; options: [string, string][]; blank?: string }) {
   return (
     <label className="field">
       <span>{label}</span>
-      <select value={value ?? ""} onChange={(e) => onChange(e.target.value || undefined)}>
+      <select aria-invalid={useInvalid(path)} value={value ?? ""} onChange={(e) => onChange(e.target.value || undefined)}>
         {blank !== undefined && <option value="">{blank}</option>}
         {options.map(([v, l]) => (
           <option key={v} value={v}>
@@ -70,6 +91,7 @@ export function SelectField({ label, hint, value, onChange, options, blank }: Fi
         ))}
       </select>
       {hint && <span className="hint">{hint}</span>}
+      <FieldError path={path} />
     </label>
   );
 }
@@ -91,7 +113,22 @@ type Row = Record<string, unknown>;
 export const blankRow = (row: Row) => Object.values(row).every((v) => v === undefined || v === null || v === "");
 
 /** An editable table of line items. On a phone each row stacks into a small card (see .rows-table in styles.css). */
-export function LineItems({ columns, rows, onChange, addLabel = "Add row", empty }: { columns: Column[]; rows: Row[] | undefined; onChange: (rows: Row[]) => void; addLabel?: string; empty?: string }) {
+export function LineItems({
+  columns,
+  rows,
+  onChange,
+  addLabel = "Add row",
+  empty,
+  path,
+}: {
+  columns: Column[];
+  rows: Row[] | undefined;
+  onChange: (rows: Row[]) => void;
+  addLabel?: string;
+  empty?: string;
+  /** Input path of the list, e.g. "specialDamages"; each cell is "<path>.<row>.<column>". */
+  path?: string;
+}) {
   const list = rows ?? [];
   const set = (i: number, key: string, v: unknown) => onChange(list.map((r, j) => (j === i ? { ...r, [key]: v } : r)));
   return (
@@ -119,6 +156,7 @@ export function LineItems({ columns, rows, onChange, addLabel = "Add row", empty
                   {columns.map((c) => (
                     <td key={c.key} data-label={c.label + (c.kind === "money" ? " ($)" : "") + (c.optional ? " (optional)" : "")} className={`cell-${c.kind}`}>
                       <Cell column={c} row={i} value={r[c.key]} onChange={(v) => set(i, c.key, v)} />
+                      <FieldError path={path && `${path}.${i}.${c.key}`} />
                     </td>
                   ))}
                   <td className="cell-remove">
@@ -180,4 +218,40 @@ export function prune(v: unknown): unknown {
     return Object.keys(out).length ? out : undefined;
   }
   return typeof v === "string" ? v.trim() || undefined : v;
+}
+
+/**
+ * Maps server issue paths onto the draft as displayed. Blank rows are dropped before sending, so the
+ * server's row N is the Nth non-blank row on screen. Issues are keyed by path; the first message wins.
+ */
+export function displayIssues(issues: InputIssue[], draft: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const issue of issues) {
+    const parts = issue.path === "" ? [] : issue.path.split(".");
+    let node: unknown = draft;
+    const shown: string[] = [];
+    for (const part of parts) {
+      if (Array.isArray(node) && /^\d+$/.test(part)) {
+        const visible = node.map((r, i) => [r, i] as const).filter(([r]) => !(r && typeof r === "object" && blankRow(r as Row)));
+        const hit = visible[Number(part)];
+        shown.push(String(hit ? hit[1] : part));
+        node = hit?.[0];
+      } else {
+        shown.push(part);
+        node = node && typeof node === "object" ? (node as Record<string, unknown>)[part] : undefined;
+      }
+    }
+    out[shown.join(".")] ??= issue.message;
+  }
+  return out;
+}
+
+/** "specialDamages.0.amountCents" → "Special damages, row 1, amount", for the summary above the buttons. */
+export function issueLabel(path: string): string {
+  if (!path) return "Form";
+  return path
+    .split(".")
+    .map((p) => (/^\d+$/.test(p) ? `row ${Number(p) + 1}` : p.replace(/Cents$/, "").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()))
+    .join(", ")
+    .replace(/^./, (c) => c.toUpperCase());
 }

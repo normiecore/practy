@@ -18,11 +18,18 @@ export type CommandResult<T = unknown> =
   | { status: "executed"; result: T }
   | { status: "pending_approval"; approvalId: string; requiredApprovals: number; message: string };
 
+/** One input problem from the server, located by its path in the command input (e.g. "specialDamages.0.amountCents"). */
+export interface InputIssue {
+  path: string;
+  message: string;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly code: string,
     message: string,
     readonly status: number,
+    readonly issues: InputIssue[] = [],
   ) {
     super(message);
   }
@@ -55,7 +62,7 @@ export async function command<T = any>(name: string, input: unknown = {}): Promi
     window.location.href = `/auth/login?returnTo=${encodeURIComponent(location.pathname + location.search)}`;
     throw new ApiError("unauthorized", "Signed out", 401);
   }
-  if (!res.ok) throw new ApiError(data.error ?? "error", data.message ?? `Request failed (${res.status})`, res.status);
+  if (!res.ok) throw new ApiError(data.error ?? "error", data.message ?? `Request failed (${res.status})`, res.status, Array.isArray(data.issues) ? data.issues : []);
   return data as CommandResult<T>;
 }
 

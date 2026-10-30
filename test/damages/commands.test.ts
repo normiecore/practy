@@ -29,6 +29,15 @@ describe("damages commands", () => {
     expect(store.collection("damages_model").list(TENANT)).toHaveLength(2);
   });
 
+  it("publishes the firm's damages defaults, which apply to any parameter left out", async () => {
+    const { exec, matter } = await pilotBus();
+    const d = await exec("get_damages_defaults", {}, as(users.paralegal));
+    expect(d).toMatchObject({ jongenPercent: { value: 15 }, jongenRange: { value: [15, 30] }, contingencyPercent: { value: 5 }, interestPercent: { value: 3 }, weeklyDivisor: { value: 52.14 }, workingLifeAge: { value: 67 } });
+    expect(d.jongenPercent.source).toMatch(/Jongen v CSR/);
+    const v = await exec<StoredDamages>("compute_damages", { matterId: matter.id, ...DAMAGES }, as(users.solicitor));
+    expect(v.model.parameters).toMatchObject({ jongenBps: 1500, contingencyBps: 500, interestBps: 300, workingLifeAge: 67 });
+  });
+
   it("reports engine problems as invalid input and hides other firms' matters", async () => {
     const { bus, matter } = await pilotBus();
     await expect(bus.execute("compute_damages", { matterId: matter.id, ...DAMAGES, jongenPercent: 10 }, as(users.solicitor))).rejects.toMatchObject({ code: "invalid" });
