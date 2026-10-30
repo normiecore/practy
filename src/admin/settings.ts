@@ -33,6 +33,8 @@ export interface TenantSettings {
     mattersRootFolderId?: string;
     schemeLabels: Record<Scheme, string>;
     emailsSubfolder: string;
+    /** Subfolder of the matter folder for documents Practy generates. */
+    generatedSubfolder: string;
   };
   mail: {
     provider: "gmail" | "graph" | "none";
@@ -68,7 +70,14 @@ export interface TenantSettings {
     senderEmail: string;
     senderPhone: string;
     signoff: string;
+    signoffFont: string;
+    signoffSizePt: number;
+    signoffColor: string;
+    accentColor: string;
+    closing: string;
   };
+  /** Address printed on court documents (e.g. Form 17 inspection address). */
+  firmAddress: string;
   privacy: {
     /** Privacy officer contact for APP 1 policy text and breach notifications. */
     officerName: string;
@@ -85,7 +94,7 @@ export function defaultSettings(tenantId: string): TenantSettings {
     timezone: "Australia/Perth",
     identity: { providers: ["google"], allowedDomains: [], requireMfaClaim: false },
     ai: { enabled: true, provider: "anthropic", model: process.env.PRACTY_AI_MODEL ?? "", externalMcpClients: false, externalClientMaxTier: 1 },
-    documents: { store: "local", schemeLabels: { icwa_mva: "MVA", workcover_wa: "WC", other: "PI" }, emailsSubfolder: "Emails" },
+    documents: { store: "local", schemeLabels: { icwa_mva: "MVA", workcover_wa: "WC", other: "PI" }, emailsSubfolder: "Emails", generatedSubfolder: "Drafts" },
     mail: { provider: "none", filingMode: "off", refileLabelPrefix: "Box Filed/Refile/", autoFile: true, autoFileCap: 60 },
     calendar: { provider: "none", calendarId: "primary" },
     firmPolicy: DEFAULT_FIRM_POLICY,
@@ -94,7 +103,8 @@ export function defaultSettings(tenantId: string): TenantSettings {
       accountName: "Law Practice Trust Account",
       statementMapping: { date: "Date", amount: "Amount", description: "Description" },
     },
-    letter: { senderName: "", senderTitle: "", senderEmail: "", senderPhone: "", signoff: "" },
+    letter: { senderName: "", senderTitle: "", senderEmail: "", senderPhone: "", signoff: "", signoffFont: "Times New Roman", signoffSizePt: 20, signoffColor: "000000", accentColor: "000000", closing: "Yours faithfully" },
+    firmAddress: "",
     privacy: { officerName: "", officerEmail: "" },
     updatedAt: new Date(0).toISOString(),
   };

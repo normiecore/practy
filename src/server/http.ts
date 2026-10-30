@@ -188,6 +188,28 @@ export function createHttpServer(app: App, opts: HttpOptions) {
     }
   });
 
+  const apiError = (res: Response, err: unknown) => {
+    if (err instanceof PractyError) res.status(STATUS[err.code]).json({ error: err.code, message: err.message });
+    else res.status(500).json({ error: "internal", message: (err as Error).message });
+  };
+
+  // ------------------------------------------------------------ document download (access checked by the same command path)
+  http.get("/api/matters/:matterId/documents/:documentId/download", async (req, res) => {
+    const r = requireApi(req, res);
+    if (!r) return;
+    try {
+      const out = await app.bus.execute("get_document", { matterId: req.params.matterId, documentId: req.params.documentId }, r);
+      if (out.status !== "executed") throw new Error("unexpected");
+      const doc = out.result as { name: string; contentType: string; storeFileId: string };
+      const bytes = await app.hub.requireDocuments(r.actor.tenantId).download(doc.storeFileId);
+      res.setHeader("Content-Type", doc.contentType);
+      res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(doc.name)}`);
+      res.send(Buffer.from(bytes));
+    } catch (err) {
+      apiError(res, err);
+    }
+  });
+
   // ------------------------------------------------------------ connecting data sources (mailbox, calendar, Xero, PracticePanther)
   const pendingConnects = new Map<string, { providerId: string; verifier: string; userId: string; tenantId: string; expires: number }>();
   const connectRedirect = (id: string) => `${opts.baseUrl}/integrations/callback/${id}`;
@@ -234,10 +256,6 @@ export function createHttpServer(app: App, opts: HttpOptions) {
   });
 
   // ------------------------------------------------------------ in-app assistant (streams Server-Sent Events)
-  const apiError = (res: Response, err: unknown) => {
-    if (err instanceof PractyError) res.status(STATUS[err.code]).json({ error: err.code, message: err.message });
-    else res.status(500).json({ error: "internal", message: (err as Error).message });
-  };
 
   http.post("/api/chat", (req, res) => {
     const r = requireApi(req, res);

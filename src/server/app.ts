@@ -16,6 +16,8 @@ import { FilingService, filingCommands } from "../filing/service.js";
 import { complianceCommands } from "../compliance/commands.js";
 import { damagesCommands } from "../damages/commands.js";
 import { costsCommands } from "../costs/commands.js";
+import { documentCommands } from "../documents/commands.js";
+import { emailToPdf } from "../docgen/pdf.js";
 import { IntegrationHub } from "../integrations/hub.js";
 import { integrationCommands } from "../integrations/commands.js";
 import { wireIntegrations } from "../integrations/factory.js";
@@ -70,9 +72,17 @@ export function createApp(opts: AppOptions = {}): App {
     store,
     hub,
     opts.renderEmailPdf ??
-      (async () => {
-        throw new Error("Email rendering is not configured");
-      }),
+      ((m: MailMessage) =>
+        emailToPdf({
+          from: m.from.name ? `${m.from.name} <${m.from.email}>` : m.from.email,
+          to: m.to.map((a) => a.email),
+          cc: m.cc.map((a) => a.email),
+          sent: m.date,
+          subject: m.subject,
+          attachments: m.attachments.map((a) => a.filename),
+          text: m.text,
+          html: m.html,
+        })),
   );
   const chronology = new ChronologyService(store, chatModel, loadBytes);
   const registry = new Registry().register(
@@ -83,6 +93,7 @@ export function createApp(opts: AppOptions = {}): App {
     ...filingCommands(filing),
     ...damagesCommands(store),
     ...costsCommands(store),
+    ...documentCommands(store, hub),
   );
   const audit = new AuditLog(undefined, (entry) =>
     store.queue.enqueue(() => store.queue.persistence.appendAudit(entry)),
