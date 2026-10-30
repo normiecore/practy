@@ -10,6 +10,7 @@ import { PractyOAuthProvider, sessionCookieFrom } from "../auth/mcp-oauth.js";
 import { actorFor, AuthService, SESSION_COOKIE } from "../auth/service.js";
 import { PractyError } from "../core/errors.js";
 import type { Actor, Surface } from "../core/types.js";
+import { renderTranscript } from "../ai/agent.js";
 import type { App } from "./app.js";
 import { buildMcpServer } from "./mcp.js";
 
@@ -183,6 +184,60 @@ export function createHttpServer(app: App, opts: HttpOptions) {
         res.status(500).json({ error: "internal", message: "Unexpected error" });
       }
     }
+  });
+
+  // ------------------------------------------------------------ in-app assistant (streams Server-Sent Events)
+  const apiError = (res: Response, err: unknown) => {
+    if (err instanceof PractyError) res.status(STATUS[err.code]).json({ error: err.code, message: err.message });
+    else res.status(500).json({ error: "internal", message: (err as Error).message });
+  };
+
+  http.post("/api/chat", (req, res) => {
+    const r = requireApi(req, res);
+    if (!r) return;
+    const matterId = typeof req.body?.matterId === "string" ? req.body.matterId : undefined;
+    const c = app.agent.start(r.actor, matterId);
+    void app.store.flush().then(() => res.json({ id: c.id }), (err) => apiError(res, err));
+  });
+
+  http.get("/api/chat/:id", (req, res) => {
+    const r = requireApi(req, res);
+    if (!r) return;
+    try {
+      const c = app.agent.get(r.actor, String(req.params.id));
+      res.json({ id: c.id, title: c.title, matterId: c.matterId, items: renderTranscript(c) });
+    } catch (err) {
+      apiError(res, err);
+    }
+  });
+
+  http.post("/api/chat/:id/messages", async (req, res) => {
+    const r = requireApi(req, res);
+    if (!r) return;
+    const text = String(req.body?.text ?? "").trim();
+    if (!text) {
+      res.status(400).json({ error: "invalid", message: "Message text is required" });
+      return;
+    }
+    try {
+      app.agent.get(r.actor, String(req.params.id));
+    } catch (err) {
+      apiError(res, err);
+      return;
+    }
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+    const abort = new AbortController();
+    res.on("close", () => abort.abort());
+    const send = (e: object) => res.write(`data: ${JSON.stringify(e)}\n\n`);
+    try {
+      await app.agent.send(r.actor, String(req.params.id), text, send, abort.signal);
+    } catch (err) {
+      send({ type: "error", message: err instanceof PractyError ? err.message : "Assistant unavailable" });
+    }
+    res.end();
   });
 
   // ------------------------------------------------------------ MCP (OAuth 2.1 for external clients)

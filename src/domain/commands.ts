@@ -110,6 +110,7 @@ export function domainCommands(store: Store, policy: FirmPolicy = DEFAULT_FIRM_P
         "Open an ICWA motor vehicle or WorkCover WA matter. Runs a conflict search across all parties and proposes key dates from the WA PI rule pack (each needs practitioner confirmation).",
       tier: 1,
       roles: [...STAFF],
+      resultMatterIds: (r: { matter: Matter }) => [r.matter.id],
       input: z.object({
         number: z.string().min(1),
         title: z.string().min(1),

@@ -21,6 +21,8 @@ export interface CommandDef<I extends z.ZodObject = z.ZodObject, O = unknown> {
   humanOnly?: boolean;
   /** Matters touched by this input; used for walls, no-AI flags and the AI-use log. */
   matterIds?: (input: z.infer<I>) => string[];
+  /** Matters created or touched as revealed by the result (e.g. a newly opened matter). */
+  resultMatterIds?: (result: any) => string[]; // annotate the parameter where the command is defined
   handler: (input: z.infer<I>, ctx: InvocationContext) => O | Promise<O>;
 }
 

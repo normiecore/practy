@@ -47,7 +47,7 @@ describe("MCP server", () => {
     expect(pending.map((a) => a.requestedVia)).toEqual(["mcp"]);
 
     const log = app.bus.audit.list({ tenantId: users.solicitor.tenantId, matterId, aiOnly: true });
-    expect(log.map((e) => e.outcome)).toEqual(["pending_approval"]);
+    expect(log.map((e) => e.outcome)).toEqual(["executed", "pending_approval"]);
   });
 
   it("hides matters without AI consent and returns tool errors rather than throwing", async () => {

@@ -99,6 +99,7 @@ export class CommandBus {
       }
 
       const result = await def.handler(input, ctx);
+      matterIds = [...new Set([...matterIds, ...(def.resultMatterIds?.(result) ?? [])])];
       record("executed", ctx.approvalId ? { approvalId: ctx.approvalId } : {});
       return { status: "executed", result };
     } catch (err) {

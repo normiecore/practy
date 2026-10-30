@@ -45,14 +45,14 @@ Firm templates (the Authority to Settle form and the letterhead) are **tenant as
 | 2 | Persistence: in-memory collections with Postgres write-through, append-only audit table | ✅ done | One deployment per firm for the pilot |
 | 3 | Matters, conflicts, WA PI key-date rules | ✅ done | `src/domain` |
 | 4 | Shadow trust ledger: Xero and trust add-on sources, reconciliation | ✅ done | `src/trust` |
-| 5 | Auth: Google and Microsoft sign-in (OIDC), dev login, sessions; OAuth 2.1 for MCP clients | ⏳ | |
-| 6 | Secrets store (encrypted connector tokens), tenant settings, users and roles | ⏳ | |
-| 7 | Connectors: Box and local document stores; Gmail and Microsoft 365 mail; Google and Outlook calendars; PracticePanther and CSV matter import | ⏳ | `src/connectors` |
-| 8 | Document generation: naming convention, Authority to Settle (firm-template filler and tagged templates), letterhead letters, Form 17, affidavit/master book PDF, email-to-PDF, particulars docx | ⏳ | `src/docgen` |
-| 9 | Damages and settlement engine: particulars heads, settlement and Authority figures, clearances (Medicare, Centrelink, NDIS), Centrelink preclusion estimate | ⏳ | `src/damages` |
-| 10 | Costs: scales by determination and date, 6-minute time capture, timesheet, costs disclosure thresholds, uplift cap | ⏳ | `src/costs` |
+| 5 | Auth: Google and Microsoft sign-in (OIDC), dev login, sessions; OAuth 2.1 for MCP clients | ✅ done | `src/auth`; consent screen; firm switch for external clients; max-tier cap |
+| 6 | Secrets store (encrypted connector tokens), tenant settings, users and roles | ✅ done | `src/core/secrets.ts`, `src/admin` |
+| 7 | Connectors (parallel agent, branch `pilot/connectors`): Box and local document stores; Gmail and Microsoft 365 mail; Google and Outlook calendars; PracticePanther and CSV matter import | ⏳ | `src/connectors` |
+| 8 | Document generation (parallel agent, branch `pilot/docgen`): naming convention, Authority to Settle (firm-template filler and tagged templates), letterhead letters, Form 17, affidavit/master book PDF, email-to-PDF, particulars docx | ⏳ | `src/docgen` |
+| 9 | Damages and settlement engine (parallel agent, branch `pilot/damages-costs`): particulars heads, settlement and Authority figures, clearances (Medicare, Centrelink, NDIS), Centrelink preclusion estimate | ⏳ | `src/damages` |
+| 10 | Costs (branch `pilot/damages-costs`): scales by determination and date, 6-minute time capture, timesheet, costs disclosure thresholds, uplift cap | ⏳ | `src/costs` |
 | 11 | Email filing pipeline: matching rules (matter number plus surname, thread history, party addresses), review queue, misc archive; a mode that drives the existing Apps Script through labels | ⏳ | |
-| 12 | AI: model gateway (Anthropic API and Bedrock Sydney), in-app chat agent over the command registry, medical chronology with verified page citations, AI policy and consent | ⏳ | |
+| 12 | AI: model gateway (Anthropic API and Bedrock Sydney), in-app chat agent over the command registry, medical chronology with verified page citations, AI policy and consent | ✅ done | `src/ai`; chat streams over SSE at `/api/chat/:id/messages`; model id is configuration (`PRACTY_AI_MODEL`) |
 | 13 | Compliance: privacy requests (APP 12/13), breach register (NDB 30-day and ransomware 72-hour timers), ADM register and privacy-policy clause, AML intake screening, evidence-document flag, retention and legal hold, AI-use log export | ⏳ | |
 | 14 | Web app (React): matters, matter workspace, approvals inbox, diary, filing review, documents, chronology, damages, settlement, trust, compliance, settings, chat | ⏳ | `web/` |
 | 15 | Deploy: Dockerfile, docker-compose, AWS ap-southeast-2 guide, backups, onboarding runbook | ⏳ | |
