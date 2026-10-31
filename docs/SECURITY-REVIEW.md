@@ -31,6 +31,7 @@ Each fix has a test that fails without it. A second reviewer re-ran the original
 - closing a privacy request on a hidden matter;
 - copies of excluded content in other matters, whether filed before the exclusion or indexed from Box after the firm's own automation filed them;
 - matters named only in conflict hits or by number in trust records, reaching an assistant conversation.
+- external MCP clients connected through a host that is later removed from the allowed list: their access and refresh tokens now stop working (31 Oct).
 
 ## Behaviour changes to know about
 - **Matter numbers** are trimmed and must match `^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$`. Numbers with spaces, `/` or ` - ` are refused on creation and skipped on import. PracticePanther numbers such as `1998` and the `SL-2001` style are unaffected. If a firm uses a format like `2024/001`, the pattern needs widening (not the folder matching, which must stay exact).
@@ -43,4 +44,6 @@ Each fix has a test that fails without it. A second reviewer re-ran the original
 - A party added by the assistant (`add_party` from an AI surface) becomes an allowed `send_email` recipient. Sending still needs practitioner approval, and the approval card shows the recipients.
 - The Box checks use the folder's current name and parent. Someone with write access to the firm's Box could rename or move folders. That is outside Practy's control.
 - Matters created before this fix with a look-alike number are not migrated. Check existing matter numbers at onboarding.
+- Error messages returned to the assistant are not scanned for matter references. Errors for hidden matters are generic "not found", so this is low risk.
+- AI exclusions follow copies by content hash (and by email message and file name). A copy whose bytes differ, such as a re-rendered or edited PDF, is not linked to the excluded original.
 - The independent penetration test is still required before go-live.

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { settingsFor } from "../admin/settings.js";
 import type { Entity } from "../core/collection.js";
 import { conflict, invalid, notFound } from "../core/errors.js";
 import { defineCommand } from "../core/registry.js";
@@ -126,7 +127,7 @@ const authorityInput = z.object({
   otherDebtsCents: amount.optional(),
   residualTrustCents: amount.optional(),
   otherTerms: z.string().optional(),
-  feesLabel: z.string().optional(),
+  feesLabel: z.string().optional().describe("Label of the firm-fees row on the firm's Authority to Settle form. Defaults to \"<firm name> fees\" from the firm settings."),
 });
 
 const clearanceEvent = z.discriminatedUnion("type", [
@@ -280,6 +281,8 @@ export function damagesCommands(store: Store) {
           ...raw,
           clientName: raw.clientName ?? clientOf(matter)?.name,
           injuryDate: raw.injuryDate ?? (matter.injuryDate ? fmtDate(matter.injuryDate) : ""),
+          // The row label on the firm's own form, which the document filler searches for.
+          feesLabel: raw.feesLabel ?? `${settingsFor(store, ctx.actor.tenantId).firmName} fees`,
         } as AuthorityInput;
         const result = engine(() => computeAuthority(input));
         const charge = (kind: Clearance["kind"]) => {

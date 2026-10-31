@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StoredDamages } from "../../src/damages/commands.js";
+import { settingsFor } from "../../src/admin/settings.js";
 import { as, TENANT, users } from "../helpers.js";
 import { pilotBus } from "./pilot-bus.js";
 
@@ -46,7 +47,7 @@ describe("damages commands", () => {
   });
 
   it("drafts the Authority to Settle with a settlement statement from recorded clearances", async () => {
-    const { exec, matter } = await pilotBus();
+    const { exec, matter, store } = await pilotBus();
     const hu = {
       matterId: matter.id,
       settlementOfferCents: 3_343_055,
@@ -67,6 +68,9 @@ describe("damages commands", () => {
     expect(a2.version).toBe(2);
     expect(a2.statement.lines[0]).toMatchObject({ kind: "medicare", amountCents: 120_000 });
     expect(a2.statement.clientBalanceCents).toBe(7_503_000 - 120_000 - 3_750_000);
+
+    // The fees row is labelled from the firm's name in its settings, not from code.
+    expect(a1.result.cells.find((c: any) => /fees$/.test(c.label)).label).toBe(`${settingsFor(store, TENANT).firmName} fees`);
 
     const latest = await exec("get_authority_to_settle", { matterId: matter.id }, as(users.paralegal));
     expect(latest.current.id).toBe(a2.id);

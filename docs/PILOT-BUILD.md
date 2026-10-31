@@ -72,9 +72,10 @@ Firm templates (the Authority to Settle form and the letterhead) are **tenant as
 3. **Recurring aids:** should recurring aids use annual ÷ 52.14 × multiplier × 0.95 like future medical (currently they are lump sums)?
 4. **Centrelink preclusion:** does the period run from the injury date or from when weekly payments stopped? Are part weeks dropped?
 5. **Release of funds:** should a known but unpaid charge block release of funds, or can it be paid from trust at the same time as the distribution?
-6. **Firm-specific values:** the Authority B(j) label ("<Firm> fees") and the fee-earner categories come from tenant settings and the user list, not code.
+6. **Matter number format:** numbers must be letters, digits, `.`, `-` or `_` (no spaces, `/` or ` - `), so they can name Box folders exactly. Does any matter use another format, such as `2024/001`?
+7. **Firm-specific values:** the Authority B(j) label defaults to "<firm name> fees" from tenant settings (or is set per authority), and fee-earner categories come from the user list. The document naming convention is still a code profile (`SOUL_LEGAL_PROFILE` in `src/docgen/naming.ts`); a second firm would need its own profile chosen in settings.
 
-## Current state (30 Oct 2026, end of session)
+## Current state (31 Oct 2026)
 - **No open PRs.** Everything is merged into `main` (normiecore/practy#1 to #3).
 - **Security review done and fixed:** `docs/SECURITY-REVIEW.md` lists the 14 findings (3 high), all fixed with tests (merged in normiecore/practy#3), plus the behaviour changes and residual risks the firm should know about. The penetration test is still outstanding.
 - **Repo is public** (made public so Actions runs free; private runs were blocked by account billing). Keep client data, firm templates and credentials out of it.

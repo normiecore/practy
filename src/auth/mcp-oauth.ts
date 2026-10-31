@@ -51,6 +51,8 @@ interface IssuedToken {
   clientId: string;
   userId: string;
   resource?: string;
+  /** Where the authorization code was sent. Re-checked against the firm's allowed hosts on every use. */
+  redirectUri?: string;
   expiresAt: number;
   revoked: boolean;
 }
@@ -196,12 +198,12 @@ export class PractyOAuthProvider implements OAuthServerProvider {
     return this.code(client, code).codeChallenge;
   }
 
-  private issue(tenantId: string, clientId: string, userId: string, resource?: string): OAuthTokens {
+  private issue(tenantId: string, clientId: string, userId: string, resource: string | undefined, redirectUri: string | undefined): OAuthTokens {
     const access = `pa_${randomBytes(32).toString("base64url")}`;
     const refresh = `pr_${randomBytes(32).toString("base64url")}`;
     const now = Date.now();
-    this.tokens.set({ id: hash(access), tenantId, kind: "access", clientId, userId, resource, expiresAt: now + ACCESS_TTL_S * 1000, revoked: false });
-    this.tokens.set({ id: hash(refresh), tenantId, kind: "refresh", clientId, userId, resource, expiresAt: now + REFRESH_TTL_S * 1000, revoked: false });
+    this.tokens.set({ id: hash(access), tenantId, kind: "access", clientId, userId, resource, redirectUri, expiresAt: now + ACCESS_TTL_S * 1000, revoked: false });
+    this.tokens.set({ id: hash(refresh), tenantId, kind: "refresh", clientId, userId, resource, redirectUri, expiresAt: now + REFRESH_TTL_S * 1000, revoked: false });
     return { access_token: access, token_type: "bearer", expires_in: ACCESS_TTL_S, refresh_token: refresh };
   }
 
@@ -209,7 +211,7 @@ export class PractyOAuthProvider implements OAuthServerProvider {
     const c = this.code(client, code);
     if (redirectUri && redirectUri !== c.redirectUri) throw new InvalidGrantError("redirect_uri mismatch");
     this.codes.set({ ...c, used: true });
-    const tokens = this.issue(c.tenantId, c.clientId, c.userId, c.resource);
+    const tokens = this.issue(c.tenantId, c.clientId, c.userId, c.resource, c.redirectUri);
     await this.store.flush();
     return tokens;
   }
@@ -220,8 +222,9 @@ export class PractyOAuthProvider implements OAuthServerProvider {
       throw new InvalidGrantError("Invalid refresh token");
     }
     if (!this.auth.userById(t.userId)) throw new InvalidGrantError("User is no longer active");
+    if (!this.grantAllowed(t)) throw new InvalidGrantError("This client's address is no longer on the firm's list of allowed AI clients");
     this.tokens.set({ ...t, revoked: true }); // rotate
-    const tokens = this.issue(t.tenantId, t.clientId, t.userId, t.resource);
+    const tokens = this.issue(t.tenantId, t.clientId, t.userId, t.resource, t.redirectUri);
     await this.store.flush();
     return tokens;
   }
@@ -231,6 +234,7 @@ export class PractyOAuthProvider implements OAuthServerProvider {
     if (!t || t.kind !== "access" || t.revoked || t.expiresAt < Date.now()) throw new InvalidTokenError("Invalid or expired token");
     if (!this.auth.userById(t.userId)) throw new InvalidTokenError("User is no longer active");
     if (!settingsFor(this.store, t.tenantId).ai.externalMcpClients) throw new InvalidTokenError("External AI clients are disabled for this firm");
+    if (!this.grantAllowed(t)) throw new InvalidTokenError("This client's address is no longer on the firm's list of allowed AI clients");
     return {
       token,
       clientId: t.clientId,
@@ -239,6 +243,16 @@ export class PractyOAuthProvider implements OAuthServerProvider {
       resource: t.resource ? new URL(t.resource) : undefined,
       extra: { userId: t.userId, tenantId: t.tenantId },
     };
+  }
+
+  /**
+   * A grant stays usable only while its redirect host is on the firm's list, so removing a host
+   * cuts off clients already connected through it. Tokens issued before the address was recorded
+   * fall back to every address the client registered.
+   */
+  private grantAllowed(t: IssuedToken): boolean {
+    const uris = t.redirectUri ? [t.redirectUri] : (this.clients.get(t.clientId)?.redirect_uris ?? []).map(String);
+    return uris.length > 0 && uris.every((u) => redirectHostAllowed(this.store, t.tenantId, u));
   }
 
   async revokeToken(_client: OAuthClientInformationFull, request: { token: string }): Promise<void> {

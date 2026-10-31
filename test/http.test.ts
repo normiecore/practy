@@ -184,7 +184,8 @@ describe("MCP OAuth for external AI clients", () => {
     const current = settingsFor(app.store, TENANT);
     settings.set({ ...current, ai: { ...current.ai, externalMcpClients: true } });
     const reg = await (await fetch(`${base}/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ client_name: "Claude", redirect_uris: ["https://attacker.example/cb"], token_endpoint_auth_method: "none" }) })).json();
-    const challenge = createHash("sha256").update("v").digest("base64url");
+    const verifier = randomBytes(32).toString("base64url");
+    const challenge = createHash("sha256").update(verifier).digest("base64url");
     const cookie = await signIn(base, "u-sol@soullegal.com.au");
     const session = await (await get(`${base}/api/session`, cookie)).json();
     const attempt = async () => {
@@ -203,6 +204,23 @@ describe("MCP OAuth for external AI clients", () => {
 
     // A principal adds the host through settings: the same client can now connect.
     settings.set({ ...settingsFor(app.store, TENANT), ai: { ...settingsFor(app.store, TENANT).ai, externalClientRedirectHosts: ["claude.ai", "attacker.example"] } });
-    expect((await attempt()).location.searchParams.get("code")).toBeTruthy();
+    const code = (await attempt()).location.searchParams.get("code")!;
+    expect(code).toBeTruthy();
+    const token = (body: Record<string, string>) =>
+      fetch(`${base}/token`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ client_id: reg.client_id, ...body }) });
+    const tok = await (await token({ grant_type: "authorization_code", code, code_verifier: verifier, redirect_uri: "https://attacker.example/cb" })).json();
+    const mcp = () =>
+      fetch(`${base}/mcp`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${tok.access_token}`, "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } } }),
+      });
+    expect((await mcp()).status).toBe(200);
+
+    // Taking the host off the list cuts off the connected client: its access token and its refresh both stop working.
+    settings.set({ ...settingsFor(app.store, TENANT), ai: { ...settingsFor(app.store, TENANT).ai, externalClientRedirectHosts: ["claude.ai"] } });
+    expect((await mcp()).status).toBe(401);
+    const refreshed = await token({ grant_type: "refresh_token", refresh_token: tok.refresh_token });
+    expect(refreshed.ok).toBe(false);
   });
 });
