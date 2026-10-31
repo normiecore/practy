@@ -11,7 +11,7 @@ Order matters: each step relies on the one before it. Allow about two working da
 
 ## 1. Firm set-up (principal, about 1 hour)
 1. Sign in with Google.
-2. **Settings → Firm:**
+2. **Settings → Firm → Edit settings** (each save goes to Approvals; approve it there):
    - firm name and address (the address goes on Form 17). The Authority to Settle fees row is labelled "<firm name> fees", which must match the row on the firm's form, so enter the name exactly as the form prints it (for example "Soul Legal");
    - identity provider and allowed domain (`soullegal.com.au`);
    - privacy officer;
@@ -22,11 +22,11 @@ Order matters: each step relies on the one before it. Allow about two working da
    - connect Xero;
    - connect PracticePanther, if using API import.
 5. **Settings → Templates:** upload the **Authority to Settle** form and the **Letterhead** (the firm's own `.docx` files).
-6. **Settings → Firm → Email:**
+6. **Settings → Firm → Edit settings → Email filing:**
    - Provider: Gmail.
    - Filing mode: `label_bridge` for the first two weeks. Practy labels the mail and the firm's existing Apps Script files it, so nothing changes for Box. Then switch to `practy`.
    - Auto-file cap: 60.
-7. **Settings → Firm → AI:** enabled. Keep external clients off for now. When they are switched on, only clients whose callback address is loopback or on the allowed hosts list (default `claude.ai` and `claude.com`) can connect; removing a host disconnects clients already using it.
+7. **Settings → Firm → Edit settings → AI:** enabled. Keep external clients off for now. When they are switched on, only clients whose callback address is loopback or on the allowed hosts list (default `claude.ai` and `claude.com`) can connect; removing a host disconnects clients already using it.
 
 ## 2. Matters (principal, about 1 hour)
 1. **Settings → Import matters:** run a dry run from PracticePanther (or a CSV export), check the preview, then import.
@@ -40,10 +40,10 @@ Order matters: each step relies on the one before it. Allow about two working da
 4. Each fee earner connects their Gmail and Calendar (**Settings → Integrations → Connect Google**), then runs **Diary → Sync calendar**.
 
 ## 3. Trust shadow ledger (accounts, about 30 minutes)
-1. Settings → Firm → Trust, then either:
+1. **Settings → Firm → Edit settings → Trust records**, then either:
    - **Xero:** source `xero`, the trust bank account id, tracking category "Matter", and a reference pattern such as `\b(\d{3,5})\b`; or
    - **Add-on:** source `addon_csv`, the column mapping, then **Trust → Upload cashbook export**.
-2. Enter the opening balances as at the start date: the cashbook total and each client ledger, from the last signed reconciliation.
+2. Enter the opening balances as at the start date (Edit settings → All fields, `trust.opening`): the cashbook total and each client ledger, from the last signed reconciliation.
 3. At month end: **Trust → Prepare reconciliation** with the bank statement CSV and its closing balance. Compare the result with the existing reconciliation. **Run three clean months in parallel and get the external examiner's review before switching the trust record of truth to Practy.**
 
 ## 4. Compliance (principal, about 30 minutes)

@@ -47,7 +47,7 @@ export function FormButton({ label, secondary, ...form }: CommandFormProps & { l
  * A button that opens a purpose-built form in a dialog, with an "All fields" link to the generated
  * form for the same command (for any input the purpose-built form does not show).
  */
-function DedicatedFormButton({
+export function DedicatedFormButton({
   label,
   title = label,
   wide,

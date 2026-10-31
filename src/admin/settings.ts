@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { Store } from "../domain/store.js";
 import type { Scheme } from "../domain/model.js";
 import { DEFAULT_FIRM_POLICY, type FirmPolicy } from "../domain/rules/wa-pi.js";
@@ -127,3 +128,119 @@ export function settingsFor(store: Store, tenantId: string): TenantSettings {
   const saved = store.collection<TenantSettings>("tenant_settings").get(tenantId);
   return deepMerge(defaultSettings(tenantId), saved ?? {});
 }
+
+const text = z.string();
+const cents = z.number().int();
+const validRegex = (v: string) => {
+  try {
+    new RegExp(v);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * The whole settings record, checked after a patch is merged so a typo or a wrong type is refused
+ * before it is saved (or sent for approval). Objects are strict, so a misspelt key is an error too.
+ */
+export const tenantSettingsSchema = z
+  .object({
+    id: text,
+    tenantId: text,
+    firmName: text.trim().min(1, "Enter the firm's name"),
+    timezone: text.refine((tz) => {
+      try {
+        new Intl.DateTimeFormat("en-AU", { timeZone: tz });
+        return true;
+      } catch {
+        return false;
+      }
+    }, "Not a known time zone (e.g. Australia/Perth)"),
+    identity: z
+      .object({
+        providers: z.array(z.enum(["google", "microsoft"])).min(1, "Choose at least one sign-in provider"),
+        allowedDomains: z.array(text.regex(/^[a-z0-9.-]+\.[a-z]{2,}$/i, "Enter a domain such as firm.com.au")),
+        requireMfaClaim: z.boolean(),
+      })
+      .strict(),
+    ai: z
+      .object({
+        enabled: z.boolean(),
+        provider: z.enum(["anthropic", "bedrock"]),
+        model: text,
+        externalMcpClients: z.boolean(),
+        externalClientMaxTier: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]),
+        externalClientRedirectHosts: z.array(text.regex(/^[a-z0-9.-]+$/i, "Enter a host name only, such as claude.ai")),
+      })
+      .strict(),
+    documents: z
+      .object({
+        store: z.enum(["box", "local"]),
+        mattersRootFolderId: text.optional(),
+        schemeLabels: z.object({ icwa_mva: text, workcover_wa: text, other: text }).strict(),
+        emailsSubfolder: text.min(1),
+        generatedSubfolder: text.min(1),
+      })
+      .strict(),
+    mail: z
+      .object({
+        provider: z.enum(["gmail", "graph", "none"]),
+        filingMode: z.enum(["practy", "label_bridge", "off"]),
+        refileLabelPrefix: text,
+        autoFile: z.boolean(),
+        autoFileCap: z.number().int().min(0).max(2000),
+      })
+      .strict(),
+    calendar: z.object({ provider: z.enum(["google", "graph", "none"]), calendarId: text.min(1) }).strict(),
+    firmPolicy: z
+      .object({
+        icwaNoticeTargetDays: z.number().int().positive(),
+        limitationReminderMonths: z.array(z.number().int().positive()),
+      })
+      .strict(),
+    trust: z
+      .object({
+        source: z.enum(["xero", "addon_csv", "none"]),
+        xeroTenantId: text.optional(),
+        trustBankAccountId: text.optional(),
+        trackingCategoryName: text.optional(),
+        referencePattern: text.refine(validRegex, "Not a valid pattern").optional(),
+        accountName: text,
+        opening: z.object({ asAt: z.iso.date(), cashbook: cents, clientLedgers: z.record(text, cents) }).strict().optional(),
+        statementMapping: z.object({ date: text, amount: text.optional(), credit: text.optional(), debit: text.optional(), description: text }).strict(),
+        cashbookMapping: z
+          .object({
+            date: text,
+            matter: text,
+            party: text,
+            reference: text.optional(),
+            amount: text.optional(),
+            receipt: text.optional(),
+            payment: text.optional(),
+            type: text.optional(),
+            transferPattern: text.refine(validRegex, "Not a valid pattern").optional(),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict(),
+    letter: z
+      .object({
+        senderName: text,
+        senderTitle: text,
+        senderEmail: text,
+        senderPhone: text,
+        signoff: text,
+        signoffFont: text,
+        signoffSizePt: z.number().positive().max(72),
+        signoffColor: text.regex(/^[0-9a-f]{6}$/i, "Use a six-digit hex colour such as 1F3864"),
+        accentColor: text.regex(/^[0-9a-f]{6}$/i, "Use a six-digit hex colour such as 1F3864"),
+        closing: text,
+      })
+      .strict(),
+    firmAddress: text,
+    privacy: z.object({ officerName: text, officerEmail: text }).strict(),
+    updatedAt: text,
+  })
+  .strict();
