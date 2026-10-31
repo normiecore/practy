@@ -17,9 +17,9 @@ export default defineConfig({
   use: { baseURL, trace: "retain-on-failure" },
   projects: [
     { name: "setup", testMatch: /auth\.setup\.ts/ },
-    { name: "chromium", use: { ...devices["Desktop Chrome"], storageState: AUTH_STATE }, dependencies: ["setup"], testIgnore: /mobile\.spec\.ts/ },
+    { name: "chromium", use: { ...devices["Desktop Chrome"], storageState: AUTH_STATE }, dependencies: ["setup"], testIgnore: /mobile(-[\w-]+)?\.spec\.ts/ },
     // iPhone screen size and touch, rendered with Chromium (the only browser CI installs).
-    { name: "iphone", use: { ...devices["iPhone 13"], browserName: "chromium", storageState: AUTH_STATE }, dependencies: ["setup"], testMatch: /mobile\.spec\.ts/ },
+    { name: "iphone", use: { ...devices["iPhone 13"], browserName: "chromium", storageState: AUTH_STATE }, dependencies: ["setup"], testMatch: /mobile(-[\w-]+)?\.spec\.ts/ },
   ],
   webServer: {
     command: "npx vite build && npx tsx src/server/main.ts",

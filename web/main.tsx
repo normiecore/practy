@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { loadSession, logout, type Session } from "./api";
 import { Chat } from "./pages/chat";
@@ -12,7 +12,7 @@ import { MatterWorkspace } from "./pages/matter";
 import { Matters } from "./pages/matters";
 import { Settings } from "./pages/settings";
 import { Trust } from "./pages/trust";
-import { href, ToastProvider, useLoad, useRoute } from "./ui";
+import { href, ToastProvider, useDialogFocus, useLoad, useRoute } from "./ui";
 import "./styles.css";
 
 const NAV: { path: string; label: string }[] = [
@@ -27,12 +27,101 @@ const NAV: { path: string; label: string }[] = [
   { path: "commands", label: "All commands" },
 ];
 
+// Phones: the first four sections are bottom tabs; the rest sit under More.
+const TAB_PATHS = ["", "matters", "approvals", "diary"];
+const TABS = NAV.filter((n) => TAB_PATHS.includes(n.path));
+const MORE = NAV.filter((n) => !TAB_PATHS.includes(n.path));
+
+const svg = (body: ReactNode) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+    {body}
+  </svg>
+);
+const ICONS: Record<string, ReactNode> = {
+  "": svg(<path d="M3.5 10.5 12 3.5l8.5 7V20a1 1 0 0 1-1 1H15v-6H9v6H4.5a1 1 0 0 1-1-1z" />),
+  matters: svg(<path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2h8.5A1.5 1.5 0 0 1 21 8.5v10a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z" />),
+  approvals: svg(
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="m8.2 12.3 2.6 2.6 5-5.4" />
+    </>,
+  ),
+  diary: svg(
+    <>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
+      <path d="M3.5 10h17M8 3v4M16 3v4" />
+    </>,
+  ),
+  more: svg(
+    <>
+      <circle cx="5.5" cy="12" r="1.3" fill="currentColor" />
+      <circle cx="12" cy="12" r="1.3" fill="currentColor" />
+      <circle cx="18.5" cy="12" r="1.3" fill="currentColor" />
+    </>,
+  ),
+};
+
+/** The phone's More sheet: the sections without a tab, the assistant, and signing out. */
+function MoreSheet({ session, section, onClose, onAssistant }: { session: Session; section: string; onClose: () => void; onAssistant: () => void }) {
+  const ref = useDialogFocus<HTMLDivElement>(onClose);
+  // The sheet belongs to the phone layout; widening the window past it closes the sheet.
+  useEffect(() => {
+    const wide = matchMedia("(min-width: 901px)");
+    const on = () => wide.matches && onClose();
+    wide.addEventListener("change", on);
+    return () => wide.removeEventListener("change", on);
+  }, [onClose]);
+  return (
+    <div className="sheet-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div ref={ref} tabIndex={-1} className="sheet" role="dialog" aria-modal="true" aria-labelledby="more-title">
+        <div className="sheet-head">
+          <h2 id="more-title">More</h2>
+          <button type="button" className="ghost modal-close" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+        </div>
+        <div className="sheet-who">
+          <span className="muted small">Signed in as</span>
+          <strong>{session.user.displayName}</strong>
+          <span className="muted small">{session.firmName}</span>
+        </div>
+        <nav className="sheet-list" aria-label="More sections">
+          {MORE.map((n) => (
+            <a key={n.path} href={href(n.path)} className={section === n.path ? "active" : undefined} aria-current={section === n.path ? "page" : undefined} onClick={onClose}>
+              {n.label}
+            </a>
+          ))}
+        </nav>
+        <div className="sheet-list">
+          <button type="button" onClick={onAssistant}>
+            Assistant
+          </button>
+          <button type="button" className="sign-out" onClick={() => void logout()}>
+            Sign out
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Shell({ session }: { session: Session }) {
   const route = useRoute();
   const [chatOpen, setChatOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const pending = useLoad<unknown[]>("list_approvals", { status: "pending" });
   const section = route[0] ?? "";
   const matterId = section === "matters" ? route[1] : undefined;
+  const routeKey = route.join("/");
+  useEffect(() => setMoreOpen(false), [routeKey]);
+  // Each page starts at the top: .main is one long-lived scroll container shared by every page.
+  const mainRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0 });
+  }, [routeKey]);
+  const pendingCount = pending.data?.length ?? 0;
+  const inMore = MORE.some((n) => n.path === section);
+  const closeMore = useCallback(() => setMoreOpen(false), []);
 
   let page;
   switch (section) {
@@ -75,7 +164,7 @@ function Shell({ session }: { session: Session }) {
         {NAV.map((n) => (
           <a key={n.path} href={href(...(n.path ? [n.path] : []))} className={section === n.path ? "active" : undefined}>
             {n.label}
-            {n.path === "approvals" && !!pending.data?.length && <span className="count">{pending.data.length}</span>}
+            {n.path === "approvals" && !!pendingCount && <span className="count">{pendingCount}</span>}
           </a>
         ))}
         <div className="spacer" />
@@ -89,7 +178,38 @@ function Shell({ session }: { session: Session }) {
           </button>
         </div>
       </nav>
-      <main className="main">{page}</main>
+      {/* Phones and narrow windows: a slim top bar and a bottom tab bar replace the sidebar (see styles.css). */}
+      <header className="topbar">
+        <span className="brand">Practy</span>
+        <span className="where">{NAV.find((n) => n.path === section)?.label}</span>
+      </header>
+      <main className="main" ref={mainRef}>
+        {page}
+      </main>
+      <nav className="tabbar" aria-label="Main">
+        {TABS.map((n) => (
+          <a key={n.path} href={href(...(n.path ? [n.path] : []))} className={section === n.path ? "active" : undefined} aria-current={section === n.path ? "page" : undefined}>
+            {ICONS[n.path]}
+            <span>{n.label}</span>
+            {n.path === "approvals" && !!pendingCount && <span className="count">{pendingCount}</span>}
+          </a>
+        ))}
+        <button type="button" className={inMore ? "active" : undefined} aria-haspopup="dialog" aria-expanded={moreOpen} onClick={() => setMoreOpen(true)}>
+          {ICONS.more}
+          <span>More</span>
+        </button>
+      </nav>
+      {moreOpen && (
+        <MoreSheet
+          session={session}
+          section={section}
+          onClose={closeMore}
+          onAssistant={() => {
+            setMoreOpen(false);
+            setChatOpen(true);
+          }}
+        />
+      )}
       {chatOpen && <Chat matterId={matterId} onClose={() => setChatOpen(false)} />}
     </div>
   );

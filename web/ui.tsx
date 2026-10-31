@@ -128,22 +128,91 @@ export function Loading({ state, children }: { state: Loaded<unknown>; children:
   return <>{children()}</>;
 }
 
-export function Modal({ title, onClose, wide, children }: { title: string; onClose: () => void; wide?: boolean; children: ReactNode }) {
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Focus handling for a dialog: moves focus into it when it opens (unless a field already took it),
+ * keeps Tab and Shift+Tab inside it, closes it on Escape, and returns focus to where it was on close.
+ */
+export function useDialogFocus<T extends HTMLElement>(onClose: () => void) {
+  const ref = useRef<T>(null);
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
-    const on = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", on);
-    return () => window.removeEventListener("keydown", on);
-  }, [onClose]);
+    const el = ref.current;
+    if (!el) return;
+    const before = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (!el.contains(document.activeElement)) el.focus({ preventScroll: true });
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        close.current();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const items = [...el.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((x) => x.getClientRects().length > 0);
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (!first || !last) {
+        e.preventDefault();
+        return;
+      }
+      const at = document.activeElement;
+      if (e.shiftKey && (at === first || at === el || !el.contains(at))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (at === last || !el.contains(at))) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      if (before?.isConnected) before.focus({ preventScroll: true });
+    };
+  }, []);
+  return ref;
+}
+
+/** A dialog. On a phone it fills the screen, with the title bar fixed and a closing row of actions kept in view. */
+/** Scrolls the first error message in a dialog into view, so a failed submit is never silent. */
+function revealProblem(body: HTMLElement | null) {
+  body?.querySelector(PROBLEM)?.scrollIntoView({ block: "center" });
+}
+const PROBLEM = '[role="alert"], .notice.danger, [aria-invalid="true"]';
+
+export function Modal({ title, onClose, wide, children }: { title: string; onClose: () => void; wide?: boolean; children: ReactNode }) {
+  const ref = useDialogFocus<HTMLDivElement>(onClose);
+  const body = useRef<HTMLDivElement>(null);
+  // The submit button stays in view at the bottom of long forms, so a message that appears further up
+  // (missing fields, or the server's objection after a round trip) would otherwise go unseen.
+  useEffect(() => {
+    const el = body.current;
+    if (!el) return;
+    const seen = new MutationObserver((changes) => {
+      const added = changes.some((c) => [...c.addedNodes].some((n) => n instanceof Element && (n.matches(PROBLEM) || !!n.querySelector(PROBLEM))));
+      if (added) revealProblem(el);
+    });
+    seen.observe(el, { childList: true, subtree: true });
+    return () => seen.disconnect();
+  }, []);
   return (
     <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={wide ? "modal wide" : "modal"} role="dialog" aria-modal="true" aria-label={title}>
-        <div className="row" style={{ justifyContent: "space-between", flexWrap: "nowrap", alignItems: "flex-start" }}>
-          <h2 style={{ margin: 0 }}>{title}</h2>
-          <button className="ghost" onClick={onClose} aria-label="Close">
+      <div ref={ref} tabIndex={-1} className={wide ? "modal wide" : "modal"} role="dialog" aria-modal="true" aria-label={title}>
+        <div className="modal-head">
+          <h2>{title}</h2>
+          <button type="button" className="ghost modal-close" onClick={onClose} aria-label="Close">
             ✕
           </button>
         </div>
-        {children}
+        <div
+          className="modal-body"
+          ref={body}
+          // A repeated failure re-renders the same message without adding it, so look again after each submit.
+          onSubmitCapture={() => requestAnimationFrame(() => requestAnimationFrame(() => revealProblem(body.current)))}
+        >
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -177,6 +246,7 @@ export const TIER_LABEL: Record<number, string> = { 0: "Read", 1: "Draft", 2: "P
 
 const HIDDEN = new Set(["tenantId", "sha1", "storeFileId", "folderId"]);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const PRIMARY = ["title", "name", "displayName", "subject"];
 const isIsoDate = (v: unknown) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}(T|$)/.test(v);
 const label = (k: string) =>
   k
@@ -205,9 +275,12 @@ export function Value({ value, name = "" }: { value: unknown; name?: string }): 
     const cols = [...new Set(value.flatMap((r) => (r && typeof r === "object" ? Object.keys(r) : [])))].filter(
       (k) => !HIDDEN.has(k) && k !== "id" && !k.endsWith("Id"),
     );
+    // On a phone each row is a card (.card-table); a naming column, if any, heads the card.
+    const primary = PRIMARY.find((k) => cols.includes(k));
+    const cellClass = (c: string) => [/Cents$/.test(c) && "num", c === primary && "primary"].filter(Boolean).join(" ") || undefined;
     return (
       <div className="table-wrap">
-        <table>
+        <table className="card-table">
           <thead>
             <tr>
               {cols.map((c) => (
@@ -221,7 +294,7 @@ export function Value({ value, name = "" }: { value: unknown; name?: string }): 
             {value.map((r, i) => (
               <tr key={(r as any)?.id ?? i}>
                 {cols.map((c) => (
-                  <td key={c} className={/Cents$/.test(c) ? "num" : undefined}>
+                  <td key={c} data-label={label(c)} className={cellClass(c)}>
                     <Value value={(r as any)?.[c]} name={c} />
                   </td>
                 ))}

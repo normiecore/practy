@@ -89,6 +89,34 @@ function Section({ title, actions, children }: { title: string; actions?: ReactN
   );
 }
 
+/**
+ * A strip of section tabs that navigate by URL. Under 900px a labelled picker replaces the strip,
+ * since a dozen tabs do not fit a phone and the strip gives no sign that more exist.
+ */
+export function SectionTabs({ tabs, current, onSelect, label = "Section" }: { tabs: [string, string][]; current: string; onSelect: (key: string) => void; label?: string }) {
+  return (
+    <>
+      <div className="tabs has-picker" role="tablist" aria-label={label}>
+        {tabs.map(([k, name]) => (
+          <button key={k} role="tab" aria-selected={current === k} className={current === k ? "active" : undefined} onClick={() => onSelect(k)}>
+            {name}
+          </button>
+        ))}
+      </div>
+      <label className="field section-picker">
+        <span>{label}</span>
+        <select value={current} onChange={(e) => onSelect(e.target.value)}>
+          {tabs.map(([k, name]) => (
+            <option key={k} value={k}>
+              {name}
+            </option>
+          ))}
+        </select>
+      </label>
+    </>
+  );
+}
+
 interface MatterDetail {
   id: string;
   number: string;
@@ -116,7 +144,7 @@ export function MatterWorkspace({ id, tab = "overview" }: { id: string; tab?: st
           <>
             <div className="page-head">
               <div>
-                <p className="small muted">
+                <p className="small muted crumbs">
                   <a href={href("matters")}>Matters</a> / {m.number}
                 </p>
                 <h1>{m.title}</h1>
@@ -128,13 +156,7 @@ export function MatterWorkspace({ id, tab = "overview" }: { id: string; tab?: st
                 </div>
               </div>
             </div>
-            <div className="tabs" role="tablist">
-              {TABS.map(([k, label]) => (
-                <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "active" : undefined} onClick={() => (location.hash = href("matters", id, k))}>
-                  {label}
-                </button>
-              ))}
-            </div>
+            <SectionTabs tabs={TABS} current={tab} onSelect={(k) => (location.hash = href("matters", id, k))} />
             <MatterTab m={m} tab={tab} />
           </>
         );
@@ -243,7 +265,7 @@ function Overview({ m }: { m: MatterDetail }) {
       </div>
       <Section title="Parties" actions={<FormButton label="Add party" name="add_party" fixed={fixed} />}>
         <div className="table-wrap">
-          <table>
+          <table className="card-table">
             <thead>
               <tr>
                 <th>Role</th>
@@ -255,12 +277,14 @@ function Overview({ m }: { m: MatterDetail }) {
             <tbody>
               {m.parties.map((p) => (
                 <tr key={p.partyId}>
-                  <td>
+                  <td data-label="Role">
                     <Badge value={p.role} />
                   </td>
-                  <td>{p.party?.name ?? "—"}</td>
-                  <td>{p.party?.email ?? "—"}</td>
-                  <td>{p.party?.phone ?? "—"}</td>
+                  <td data-label="Name" className="primary">
+                    {p.party?.name ?? "—"}
+                  </td>
+                  <td data-label="Email">{p.party?.email ?? "—"}</td>
+                  <td data-label="Phone">{p.party?.phone ?? "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -294,7 +318,7 @@ function KeyDates({ matterId }: { matterId: string }) {
         {() =>
           dates.data!.length ? (
             <div className="table-wrap">
-              <table>
+              <table className="card-table">
                 <thead>
                   <tr>
                     <th>Date</th>
@@ -307,8 +331,8 @@ function KeyDates({ matterId }: { matterId: string }) {
                 <tbody>
                   {dates.data!.map((k) => (
                     <tr key={k.id}>
-                      <td>{k.date ? date(k.date) : <Badge value="needs entry" tone="danger" />}</td>
-                      <td>
+                      <td data-label="Date">{k.date ? date(k.date) : <Badge value="needs entry" tone="danger" />}</td>
+                      <td data-label="Key date" className="primary">
                         {k.title} {k.kind === "critical" && <Badge value="critical" />}
                         {k.notes.map((n, i) => (
                           <div key={i} className="hint">
@@ -316,7 +340,7 @@ function KeyDates({ matterId }: { matterId: string }) {
                           </div>
                         ))}
                       </td>
-                      <td className="small">
+                      <td data-label="Source" className="small">
                         {k.source}
                         {!k.ruleVerified && (
                           <div>
@@ -324,11 +348,11 @@ function KeyDates({ matterId }: { matterId: string }) {
                           </div>
                         )}
                       </td>
-                      <td>
+                      <td data-label="Status">
                         <Badge value={k.status} />
                       </td>
-                      <td>
-                        <div className="row" style={{ flexWrap: "nowrap" }}>
+                      <td data-label="Actions" className="actions">
+                        <div className="row nowrap">
                           {k.status === "proposed" && k.date && (
                             <button className="secondary" onClick={() => void act("confirm_key_date", { matterId, keyDateId: k.id })}>
                               Confirm
@@ -372,7 +396,7 @@ function Tasks({ matterId }: { matterId: string }) {
         {() =>
           tasks.data!.length ? (
             <div className="table-wrap">
-              <table>
+              <table className="card-table">
                 <thead>
                   <tr>
                     <th>Due</th>
@@ -384,16 +408,16 @@ function Tasks({ matterId }: { matterId: string }) {
                 <tbody>
                   {tasks.data!.map((t) => (
                     <tr key={t.id}>
-                      <td>{date(t.dueOn)}</td>
-                      <td>
+                      <td data-label="Due">{date(t.dueOn)}</td>
+                      <td data-label="Task" className="primary">
                         {t.title}
                         {t.detail && <div className="hint">{t.detail}</div>}
                         {t.source !== "manual" && <span className="badge">{t.source.replace(/_/g, " ")}</span>}
                       </td>
-                      <td>
+                      <td data-label="Status">
                         <Badge value={t.status} />
                       </td>
-                      <td>
+                      <td data-label="Actions" className="actions">
                         {t.status === "open" ? (
                           <button className="secondary" onClick={() => void act("update_task", { taskId: t.id, status: "done" }, "Task completed")}>
                             Done
@@ -432,7 +456,7 @@ function Evidence({ matterId }: { matterId: string }) {
         {() =>
           reqs.data!.length ? (
             <div className="table-wrap">
-              <table>
+              <table className="card-table">
                 <thead>
                   <tr>
                     <th>Requested</th>
@@ -446,16 +470,18 @@ function Evidence({ matterId }: { matterId: string }) {
                 <tbody>
                   {reqs.data!.map((r) => (
                     <tr key={r.id}>
-                      <td>{date(r.requestedOn)}</td>
-                      <td>{r.provider}</td>
-                      <td>
+                      <td data-label="Requested">{date(r.requestedOn)}</td>
+                      <td data-label="Provider">{r.provider}</td>
+                      <td data-label="What" className="primary">
                         <span className="badge">{r.kind.replace(/_/g, " ")}</span> {r.description}
                       </td>
-                      <td className="small">{r.status === "requested" ? r.chaseOn.map(date).join(", ") : "—"}</td>
-                      <td>
+                      <td data-label="Chase" className="small">
+                        {r.status === "requested" ? r.chaseOn.map(date).join(", ") : "—"}
+                      </td>
+                      <td data-label="Status">
                         <Badge value={r.status} /> {r.receivedOn && <span className="small muted">{date(r.receivedOn)}</span>}
                       </td>
-                      <td>
+                      <td data-label="Actions" className="actions">
                         {r.status === "requested" && <FormButton label="Received" secondary name="mark_evidence_received" fixed={{ matterId, requestId: r.id }} />}
                       </td>
                     </tr>
@@ -506,7 +532,7 @@ function Documents({ matterId }: { matterId: string }) {
         {() =>
           docs.data!.length ? (
             <div className="table-wrap">
-              <table>
+              <table className="card-table">
                 <thead>
                   <tr>
                     <th>Name</th>
@@ -519,18 +545,22 @@ function Documents({ matterId }: { matterId: string }) {
                 <tbody>
                   {docs.data!.map((d) => (
                     <tr key={d.id}>
-                      <td>
-                        <a href={`/api/matters/${encodeURIComponent(matterId)}/documents/${encodeURIComponent(d.id)}/download`}>{d.name}</a>
+                      <td data-label="Name" className="primary">
+                        <a className="clamp" title={d.name} href={`/api/matters/${encodeURIComponent(matterId)}/documents/${encodeURIComponent(d.id)}/download`}>
+                          {d.name}
+                        </a>
                         <div className="hint">
                           {d.source} · {(d.size / 1024).toFixed(0)} KB
                         </div>
                       </td>
-                      <td>{date(d.docDate)}</td>
-                      <td>{d.category ?? "—"}</td>
-                      <td>
-                        {d.evidence && <Badge value="evidence" tone="info" />} {d.aiExcluded && <Badge value="no AI" tone="warn" />}
+                      <td data-label="Date">{date(d.docDate)}</td>
+                      <td data-label="Category">{d.category ?? "—"}</td>
+                      <td data-label="Flags">
+                        {d.evidence && <Badge value="evidence" tone="info" />}
+                        {d.evidence && d.aiExcluded && " "}
+                        {d.aiExcluded && <Badge value="no AI" tone="warn" />}
                       </td>
-                      <td>
+                      <td data-label="Actions" className="actions">
                         <div className="row">
                           {d.contentType === "application/pdf" && (
                             <button className="ghost" onClick={() => void act("build_chronology", { matterId, documentId: d.id }, "Chronology extracted: review it on the Chronology tab")}>
@@ -601,7 +631,7 @@ function Chronology({ matterId }: { matterId: string }) {
         {() =>
           events.data!.length ? (
             <div className="table-wrap">
-              <table>
+              <table className="card-table">
                 <thead>
                   <tr>
                     <th>Date</th>
@@ -614,21 +644,21 @@ function Chronology({ matterId }: { matterId: string }) {
                 <tbody>
                   {events.data!.map((e) => (
                     <tr key={e.id}>
-                      <td>{e.date ? date(e.date) : e.dateText}</td>
-                      <td>{e.provider}</td>
-                      <td>
+                      <td data-label="Date">{e.date ? date(e.date) : e.dateText}</td>
+                      <td data-label="Provider">{e.provider}</td>
+                      <td data-label="Event" className="primary">
                         <span className="badge">{e.eventType}</span> {e.summary}
                         {e.diagnoses.length > 0 && <div className="hint">Diagnoses: {e.diagnoses.join("; ")}</div>}
                         {e.wpiPercent !== null && <div className="hint">WPI {e.wpiPercent}%</div>}
                       </td>
-                      <td className="small">
+                      <td data-label="Source" className="small wide">
                         <a href={`/api/matters/${encodeURIComponent(matterId)}/documents/${encodeURIComponent(e.documentId)}/download#page=${e.page}`}>
                           {e.documentName} p.{e.page}
                         </a>
                         <div className="hint">“{e.quote}”</div>
                         {e.verification !== "verified" && <Badge value={e.verification} tone="warn" />}
                       </td>
-                      <td>
+                      <td data-label="Review" className="actions">
                         <Badge value={e.reviewStatus} tone={e.reviewStatus === "accepted" || e.reviewStatus === "edited" ? "ok" : e.reviewStatus === "rejected" ? "danger" : "warn"} />
                         {e.reviewStatus === "unreviewed" && (
                           <div className="row" style={{ marginTop: "0.3rem" }}>
@@ -730,7 +760,7 @@ function Damages({ m }: { m: MatterDetail }) {
                   </div>
                 )}
                 <div className="table-wrap">
-                  <table>
+                  <table className="card-table damages-table">
                     <thead>
                       <tr>
                         <th>Head</th>
@@ -741,23 +771,27 @@ function Damages({ m }: { m: MatterDetail }) {
                     <tbody>
                       {d.model.summary.lines.map((l) => (
                         <tr key={l.id}>
-                          <td>{l.id}</td>
-                          <td>{l.title}</td>
-                          <td className="num">{money(l.amountCents)}</td>
+                          <td data-label="Head">{l.id}</td>
+                          <td data-label="Item" className="primary">
+                            {l.title}
+                          </td>
+                          <td data-label="Amount" className="num">
+                            {money(l.amountCents)}
+                          </td>
                         </tr>
                       ))}
-                      <tr>
-                        <td />
+                      <tr className="total">
+                        <td data-label="Head" />
                         <th>Total</th>
                         <th className="num">{money(d.model.summary.totalCents)}</th>
                       </tr>
-                      <tr>
-                        <td />
-                        <td>Less refundable to insurer</td>
-                        <td className="num">({money(d.model.summary.refundable.totalCents)})</td>
+                      <tr className="total">
+                        <td data-label="Head" />
+                        <td data-label="Item">Less refundable to insurer</td>
+                        <td data-label="Amount" className="num">({money(d.model.summary.refundable.totalCents)})</td>
                       </tr>
-                      <tr>
-                        <td />
+                      <tr className="total">
+                        <td data-label="Head" />
                         <th>Net</th>
                         <th className="num">{money(d.model.summary.netCents)}</th>
                       </tr>
@@ -885,7 +919,7 @@ function AllActions({ matterId }: { matterId: string }) {
     <>
       <p className="muted small">Everything Practy can do on this matter. The assistant and MCP clients use the same commands.</p>
       <div className="table-wrap">
-        <table>
+        <table className="card-table">
           <thead>
             <tr>
               <th>Action</th>
@@ -896,13 +930,17 @@ function AllActions({ matterId }: { matterId: string }) {
           <tbody>
             {cmds.map((c) => (
               <tr key={c.name}>
-                <td>
+                <td data-label="Action" className="primary">
                   <button className="ghost" onClick={() => setOpen(c)}>
                     {c.title}
                   </button>
                 </td>
-                <td className="small">{c.description}</td>
-                <td className="small">{TIER_LABEL[c.tier]}</td>
+                <td data-label="What it does" className="small wide">
+                  {c.description}
+                </td>
+                <td data-label="Approval" className="small">
+                  {TIER_LABEL[c.tier]}
+                </td>
               </tr>
             ))}
           </tbody>

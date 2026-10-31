@@ -16,6 +16,11 @@ export function Chat({ matterId, onClose }: { matterId?: string; onClose: () => 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const log = useRef<HTMLDivElement>(null);
+  // Take focus when opened (from the sidebar or the phone's More sheet), so keyboard and screen-reader users land here.
+  const panel = useRef<HTMLElement>(null);
+  useEffect(() => {
+    panel.current?.focus();
+  }, []);
   const abort = useRef<AbortController>(undefined);
 
   // A new conversation per matter, so the assistant's context matches the screen.
@@ -65,7 +70,7 @@ export function Chat({ matterId, onClose }: { matterId?: string; onClose: () => 
   };
 
   return (
-    <aside className="chat" aria-label="Assistant">
+    <aside className="chat" aria-label="Assistant" ref={panel} tabIndex={-1}>
       <header>
         <strong>Assistant{matterId ? " (this matter)" : ""}</strong>
         <button className="ghost" onClick={onClose} aria-label="Close assistant">
@@ -110,6 +115,7 @@ export function Chat({ matterId, onClose }: { matterId?: string; onClose: () => 
           }}
           placeholder="Message"
           aria-label="Message"
+          enterKeyHint="send"
           disabled={!conversation}
         />
         <button disabled={busy || !conversation}>Send</button>

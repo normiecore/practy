@@ -115,6 +115,9 @@ label.check input { width: auto; }
 
 .modal-back { position: fixed; inset: 0; background: rgb(0 0 0 / 35%); display: grid; place-items: center; z-index: 20; padding: 1rem; }
 .modal { background: var(--surface); border-radius: 10px; padding: 1.25rem; width: min(640px, 100%); max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 30px rgb(0 0 0 / 25%); }
+.modal:focus, .sheet:focus { outline: none; }
+.modal-head { display: flex; gap: 0.5rem; justify-content: space-between; align-items: center; }
+.modal-head h2 { margin: 0; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
 
 .toasts { pointer-events: none; position: fixed; right: 1rem; bottom: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 30; max-width: 380px; }
@@ -123,6 +126,7 @@ label.check input { width: auto; }
 
 .chat { width: 380px; border-left: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; height: 100%; }
 .chat header { padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.chat header button { min-width: 44px; min-height: 44px; justify-content: center; }
 .chat .log { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
 .chat .msg { white-space: pre-wrap; word-wrap: break-word; }
 .chat .msg.user { align-self: flex-end; background: var(--accent-soft); padding: 0.5rem 0.75rem; border-radius: 10px 10px 2px 10px; max-width: 90%; }
@@ -137,17 +141,74 @@ label.check input { width: auto; }
 .kv dd { margin: 0; }
 
 @media (max-width: 900px) {
-  .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-  .nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); padding: 0.5rem; }
-  .nav .firm, .nav .spacer, .nav .user .who { display: none; }
-  .nav .user { border-top: 0; margin-top: 0; padding: 0 0.5rem; display: flex; align-items: center; white-space: nowrap; }
-  .main { padding: 1rem; }
   /* iOS zooms into any field under 16px when it gets focus. */
   input, select, textarea { font-size: 16px; }
   button, .btn, input, select { min-height: 44px; }
   .tabs button { min-height: 44px; }
-  .chat { position: fixed; inset: 0; width: auto; z-index: 25; }
 }
+
+/* Phone: app frame
+ * Under 900px the sidebar gives way to a slim top bar, a bottom tab bar (Today, Matters, Approvals,
+ * Diary, More) and a More sheet. Under 640px dialogs fill the screen. Bars, sheets, dialogs, the
+ * assistant and toasts keep clear of the notch and home indicator (viewport-fit=cover in index.html). */
+.topbar, .tabbar { display: none; }
+@media (max-width: 900px) {
+  :root { --tabbar-h: 3.5rem; --tabbar-space: calc(var(--tabbar-h) + env(safe-area-inset-bottom)); }
+  .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .nav { display: none; }
+
+  .topbar { display: flex; align-items: baseline; gap: 0.6rem; min-width: 0; background: var(--surface); border-bottom: 1px solid var(--border); padding: calc(0.7rem + env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) 0.7rem max(1rem, env(safe-area-inset-left)); }
+  .topbar .brand { font-weight: 700; font-size: 1.05rem; }
+  .topbar .where { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .main { padding: 1rem max(1rem, env(safe-area-inset-right)) calc(var(--tabbar-space) + 1.5rem) max(1rem, env(safe-area-inset-left)); }
+
+  .tabbar { display: flex; justify-content: center; position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; background: var(--surface); border-top: 1px solid var(--border); box-shadow: 0 -1px 3px rgb(16 24 40 / 6%); padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  .tabbar > a, .tabbar > button { position: relative; flex: 1 1 0; min-width: 0; max-width: 9rem; min-height: var(--tabbar-h); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.15rem; padding: 0.3rem 0.15rem; margin: 0; background: none; border: 0; border-radius: 0; color: var(--muted); font: 500 0.75rem/1.2 var(--font); text-decoration: none; -webkit-tap-highlight-color: transparent; }
+  .tabbar > a > span:not(.count), .tabbar > button > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tabbar svg { width: 24px; height: 24px; flex: none; }
+  .tabbar .active { color: var(--accent); font-weight: 700; }
+  .tabbar .active::before { content: ""; position: absolute; top: -1px; left: 22%; right: 22%; height: 3px; border-radius: 0 0 3px 3px; background: var(--accent); }
+  .tabbar .count { position: absolute; top: 0.2rem; left: calc(50% + 0.35rem); min-width: 1.15rem; padding: 0 0.3rem; line-height: 1.15rem; font-size: 0.68rem; font-weight: 700; text-align: center; border: 2px solid var(--surface); box-sizing: content-box; }
+
+  .sheet-back { position: fixed; inset: 0; z-index: 20; background: rgb(0 0 0 / 35%); display: flex; flex-direction: column; justify-content: flex-end; }
+  .sheet { background: var(--surface); border-radius: 14px 14px 0 0; box-shadow: 0 -6px 24px rgb(0 0 0 / 20%); max-height: calc(100dvh - 2rem - env(safe-area-inset-top)); overflow-y: auto; overscroll-behavior: contain; padding: 0.25rem max(0.75rem, env(safe-area-inset-right)) calc(0.75rem + env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left)); animation: sheet-in 160ms ease-out; }
+  .sheet-head { display: flex; align-items: center; justify-content: space-between; padding-left: 0.5rem; }
+  .sheet-head h2 { margin: 0; font-size: 1.1rem; }
+  .sheet-who { display: flex; flex-direction: column; padding: 0.25rem 0.5rem 0.75rem; overflow-wrap: anywhere; }
+  .sheet-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 0.75rem; }
+  .sheet-list > a, .sheet-list > button { min-height: 48px; display: flex; align-items: center; justify-content: flex-start; padding: 0 0.9rem; margin: 0; border: 0; border-radius: 0; border-top: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 1rem; text-align: left; text-decoration: none; }
+  .sheet-list > :first-child { border-top: 0; }
+  .sheet-list > a.active { color: var(--accent); font-weight: 600; background: var(--accent-soft); }
+  .sheet-list > .sign-out { color: var(--danger); }
+
+  .toasts { left: max(1rem, env(safe-area-inset-left)); right: max(1rem, env(safe-area-inset-right)); bottom: calc(var(--tabbar-space) + 0.75rem); max-width: none; }
+
+  .chat { position: fixed; inset: 0; width: auto; height: 100vh; height: 100dvh; z-index: 25; border-left: 0; }
+  .chat header { padding: calc(0.25rem + env(safe-area-inset-top)) max(0.25rem, env(safe-area-inset-right)) 0.25rem max(1rem, env(safe-area-inset-left)); }
+  .chat .log { padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right)); }
+  .chat form { padding: 0.6rem max(0.75rem, env(safe-area-inset-right)) calc(0.6rem + env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left)); }
+  .chat form textarea { min-height: 44px; height: 44px; }
+  .modal-close { width: 44px; height: 44px; justify-content: center; flex: none; font-size: 1.1rem; }
+
+  /* Today: the four counts as a two by two grid. */
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+}
+@media (max-width: 640px) {
+  .stats .card { padding: 0.7rem 0.8rem; display: flex; flex-direction: column; justify-content: space-between; gap: 0.2rem; }
+  .stats .stat { font-size: 1.3rem; line-height: 1.2; }
+
+  /* Dialogs fill the screen: the title bar stays put, the body scrolls, and a closing row of actions stays in view. */
+  .modal-back { padding: 0; place-items: stretch; }
+  .modal, .modal.wide { width: 100%; height: 100vh; height: 100dvh; max-height: none; border-radius: 0; padding: 0; box-shadow: none; display: flex; flex-direction: column; overflow: hidden; }
+  .modal-head { position: sticky; top: 0; flex: none; align-items: center; background: var(--surface); border-bottom: 1px solid var(--border); padding: env(safe-area-inset-top) max(0.25rem, env(safe-area-inset-right)) 0 max(1rem, env(safe-area-inset-left)); }
+  .modal-head h2 { flex: 1; min-width: 0; font-size: 1.05rem; padding: 0.6rem 0; }
+  .modal-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 1rem max(1rem, env(safe-area-inset-right)) calc(1rem + env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left)); }
+  .modal-body:has(> .modal-actions:last-child, > form:last-child > .modal-actions:last-child) { padding-bottom: 0; }
+  .modal-body > .modal-actions:last-child, .modal-body > form:last-child > .modal-actions:last-child { position: sticky; bottom: 0; z-index: 1; background: var(--surface); border-top: 1px solid var(--border); margin: 1rem calc(-1 * max(1rem, env(safe-area-inset-right))) 0 calc(-1 * max(1rem, env(safe-area-inset-left))); padding: 0.6rem max(1rem, env(safe-area-inset-right)) calc(0.6rem + env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left)); }
+  .modal-body > .modal-actions:last-child > button, .modal-body > form:last-child > .modal-actions:last-child > button { flex: 1; justify-content: center; }
+}
+@keyframes sheet-in { from { transform: translateY(100%); } }
+@media (prefers-reduced-motion: reduce) { .sheet { animation: none; } }
 
 a.card { color: inherit; display: block; }
 a.card:hover { text-decoration: none; border-color: var(--accent); }
@@ -179,6 +240,82 @@ label.field > span.hint { display: block; font-weight: 400; font-size: 0.8rem; m
   .rows-table td[data-label]::before { content: attr(data-label); display: block; font-weight: 600; font-size: 0.8rem; margin-bottom: 0.1rem; }
   .rows-table td.cell-money input, .rows-table td.cell-number input { text-align: left; }
   .rows-table td.cell-remove { text-align: right; }
+}
+
+/* Phone: page content */
+/* These first rules keep desktop as it was; everything else here applies to narrow screens only. */
+.row.nowrap { flex-wrap: nowrap; }
+.filters .filter-search { max-width: 360px; }
+.filters .filter-scheme { max-width: 220px; }
+select.file-to { max-width: 260px; }
+label.section-picker, .card-table .card-only { display: none; }
+
+@media (max-width: 900px) {
+  /* Long tab strips give no sign that more tabs exist: a labelled picker replaces them (SectionTabs). */
+  .tabs.has-picker { display: none; }
+  label.section-picker { display: block; margin: 0.5rem 0 1rem; }
+  /* Search and filter share one row and wrap when there is no room. */
+  .filters .filter-search { flex: 1 1 8rem; width: auto; min-width: 0; max-width: none; }
+  .filters .filter-scheme { flex: 0 1 auto; width: auto; min-width: 0; max-width: 60%; }
+  /* Tap targets at least 44px tall. */
+  .crumbs { margin: 0; }
+  .crumbs a, .approval-meta a { display: inline-flex; align-items: center; min-height: 44px; }
+}
+
+@media (max-width: 640px) {
+  /*
+   * Tables become one card per row, as .rows-table does: the header hides and each cell shows its
+   * data-label beside the value. The naming cell (.primary) heads the card and actions (.actions) sit
+   * at its foot. The markup stays a real table for desktop and screen readers.
+   */
+  .card-table, .card-table tbody { display: block; width: 100%; }
+  .card-table { border: 0; border-radius: 0; background: none; overflow: visible; }
+  .card-table thead { display: none; }
+  .table-wrap:has(> .card-table) { overflow: visible; }
+  .card-table tr { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 0.55rem 0.75rem; margin-bottom: 0.6rem; }
+  .card-table td, .card-table tbody th { display: flow-root; border: 0; padding: 0.15rem 0 0.15rem 7rem; min-width: 0; text-align: left; overflow-wrap: anywhere; }
+  .card-table td[data-label]::before { content: attr(data-label); float: left; width: 6.5rem; margin-left: -7rem; color: var(--muted); font-size: 0.8rem; font-weight: 400; line-height: 1.65; }
+  .card-table td:empty { display: none; }
+  .card-table td.num { text-align: left; }
+  .card-table td.primary { order: -1; padding: 0 0 0.3rem; font-weight: 600; }
+  .card-table td.primary .hint, .card-table td.primary .badge { font-weight: 400; }
+  .card-table td.primary::before, .card-table td.actions::before { content: none; }
+  .card-table td.primary button.ghost { padding-left: 0; font-weight: 600; }
+  /* Long prose uses the full width, with its label above. */
+  .card-table td.wide { padding-left: 0; }
+  .card-table td.wide::before { float: none; display: block; width: auto; margin: 0; }
+  .card-table td.actions { order: 1; padding: 0.5rem 0 0; margin-top: 0.35rem; border-top: 1px solid var(--border); }
+  .card-table td.actions .row { flex-wrap: wrap; }
+  .card-table td.actions select { flex: 1 1 100%; max-width: none; }
+  .card-table button { white-space: normal; text-align: left; }
+  .card-table td a { display: inline-flex; align-items: center; min-height: 44px; }
+  /* A matter title after its number link goes on the next line rather than wrapping beside a tall link. */
+  .card-table td a + .muted { display: block; }
+  /* Long document names wrap but stop at three lines; the title attribute holds the full name. */
+  .card-table td a.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; min-height: 44px; margin-block: 0.35rem; }
+
+  /* Damages heads: one card of "head, item: amount" lines, as in the particulars, then the totals. */
+  .damages-table tbody { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 0 0.75rem; }
+  .damages-table tr { flex-direction: row; align-items: baseline; gap: 0.6rem; background: none; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; box-shadow: none; margin: 0; padding: 0.5rem 0; }
+  .damages-table tr:last-child { border-bottom: 0; }
+  .damages-table td, .damages-table tbody th { padding: 0; background: none; color: var(--text); font-size: inherit; text-transform: none; letter-spacing: 0; }
+  .damages-table td[data-label]::before { content: none; }
+  .damages-table td:first-child { flex: 0 0 2rem; color: var(--muted); }
+  .damages-table td.primary { order: 0; flex: 1 1 0; padding: 0; font-weight: 400; }
+  .damages-table td.num, .damages-table th.num { flex-shrink: 0; margin-left: auto; text-align: right; white-space: nowrap; }
+  .damages-table tr:not(.total) + tr.total { border-top: 1px solid var(--muted); }
+
+  /* Matters: one link carries number and title; scheme and status as badges, then the injury date. */
+  .matters-table tr { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.5rem; }
+  .matters-table td { padding: 0; }
+  .matters-table td[data-label]::before { float: none; display: inline; width: auto; margin: 0 0.3rem 0 0; }
+  .matters-table td.matter-no { display: none; }
+  .matters-table td.primary { flex: 1 1 100%; padding: 0; }
+  .matters-table td a.matter-link { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-height: 44px; }
+  .matters-table .card-only { display: block; font-size: 0.8rem; font-weight: 400; color: var(--muted); }
+  .matters-table td.scheme::before, .matters-table td.status::before { content: none; }
+  .matters-table td[data-label="Injury date"] { order: 1; }
+  .matters-table td.scheme span { display: inline-block; font-size: 0.75rem; padding: 0.05rem 0.5rem; border-radius: 999px; background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); white-space: nowrap; }
 }
 .field-error { display: block; color: var(--danger); font-size: 0.8rem; margin-top: 0.15rem; }
 [aria-invalid="true"] { border-color: var(--danger); }
