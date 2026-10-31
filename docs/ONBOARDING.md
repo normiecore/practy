@@ -57,6 +57,7 @@ Order matters: each step relies on the one before it. Allow about two working da
 - Damages, then particulars. Settlement, then Authority to Settle.
 - The Approvals inbox: what needs approval and why.
 - The assistant: ask it for anything you would ask a paralegal. It drafts; you approve.
+- Phones: add Practy to the Home Screen and sign in inside it (`docs/IPHONE.md`, "How staff install it").
 
 ## Success measures (from the strategy)
 Collect a baseline (sample timesheets) before go-live, then measure weekly:
