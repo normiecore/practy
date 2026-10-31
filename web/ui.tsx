@@ -128,22 +128,65 @@ export function Loading({ state, children }: { state: Loaded<unknown>; children:
   return <>{children()}</>;
 }
 
-export function Modal({ title, onClose, wide, children }: { title: string; onClose: () => void; wide?: boolean; children: ReactNode }) {
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Focus handling for a dialog: moves focus into it when it opens (unless a field already took it),
+ * keeps Tab and Shift+Tab inside it, closes it on Escape, and returns focus to where it was on close.
+ */
+export function useDialogFocus<T extends HTMLElement>(onClose: () => void) {
+  const ref = useRef<T>(null);
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
-    const on = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", on);
-    return () => window.removeEventListener("keydown", on);
-  }, [onClose]);
+    const el = ref.current;
+    if (!el) return;
+    const before = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (!el.contains(document.activeElement)) el.focus({ preventScroll: true });
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        close.current();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const items = [...el.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((x) => x.getClientRects().length > 0);
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (!first || !last) {
+        e.preventDefault();
+        return;
+      }
+      const at = document.activeElement;
+      if (e.shiftKey && (at === first || at === el || !el.contains(at))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (at === last || !el.contains(at))) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      if (before?.isConnected) before.focus({ preventScroll: true });
+    };
+  }, []);
+  return ref;
+}
+
+/** A dialog. On a phone it fills the screen, with the title bar fixed and a closing row of actions kept in view. */
+export function Modal({ title, onClose, wide, children }: { title: string; onClose: () => void; wide?: boolean; children: ReactNode }) {
+  const ref = useDialogFocus<HTMLDivElement>(onClose);
   return (
     <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={wide ? "modal wide" : "modal"} role="dialog" aria-modal="true" aria-label={title}>
-        <div className="row" style={{ justifyContent: "space-between", flexWrap: "nowrap", alignItems: "flex-start" }}>
-          <h2 style={{ margin: 0 }}>{title}</h2>
-          <button className="ghost" onClick={onClose} aria-label="Close">
+      <div ref={ref} tabIndex={-1} className={wide ? "modal wide" : "modal"} role="dialog" aria-modal="true" aria-label={title}>
+        <div className="modal-head">
+          <h2>{title}</h2>
+          <button type="button" className="ghost modal-close" onClick={onClose} aria-label="Close">
             ✕
           </button>
         </div>
-        {children}
+        <div className="modal-body">{children}</div>
       </div>
     </div>
   );

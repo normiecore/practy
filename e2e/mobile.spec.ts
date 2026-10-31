@@ -20,7 +20,8 @@ test("every main page fits an iPhone screen, with sign-out reachable", async ({ 
     await expect(page.locator(".main h1").first()).toBeVisible();
     await fitsScreen(page, path);
   }
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "More" }).click();
+  await expect(page.getByRole("dialog", { name: "More" }).getByRole("button", { name: "Sign out" })).toBeVisible();
 });
 
 test("matter tabs fit an iPhone screen and fields are large enough not to zoom", async ({ page, request }) => {

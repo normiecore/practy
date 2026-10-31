@@ -70,7 +70,7 @@ export function Home() {
           const d = digest.data!;
           return (
             <div className="stack">
-              <div className="grid">
+              <div className="grid stats">
                 <a className="card" href={href("approvals")}>
                   <div className="muted small">Approvals waiting</div>
                   <div className="stat">{d.approvalsPending}</div>

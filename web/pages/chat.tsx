@@ -110,6 +110,7 @@ export function Chat({ matterId, onClose }: { matterId?: string; onClose: () => 
           }}
           placeholder="Message"
           aria-label="Message"
+          enterKeyHint="send"
           disabled={!conversation}
         />
         <button disabled={busy || !conversation}>Send</button>

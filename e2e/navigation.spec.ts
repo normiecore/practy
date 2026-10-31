@@ -27,6 +27,26 @@ test("every page in the left navigation loads", async ({ page }) => {
   }
 });
 
+test("the desktop keeps the left sidebar and centred dialogs, without the phone bars", async ({ page }) => {
+  await page.goto("/#/matters");
+  const sidebar = page.locator("nav.nav");
+  await expect(sidebar).toBeVisible();
+  expect((await sidebar.boundingBox())!.width).toBe(220);
+  await expect(sidebar.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.locator(".tabbar")).toBeHidden();
+  await expect(page.locator(".topbar")).toBeHidden();
+  await expect(page.getByRole("button", { name: "More" })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Open a matter" }).click();
+  const dialog = page.getByRole("dialog", { name: "Open a matter" });
+  await expect(dialog).toBeVisible();
+  const box = (await dialog.boundingBox())!;
+  expect(box.width).toBeLessThanOrEqual(640);
+  expect(box.y).toBeGreaterThan(0);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+});
+
 test("every matter tab loads", async ({ page, request }) => {
   const matter = await createMatter(request, { number: matterNumber("TABS"), title: "Tabs test v ICWA", client: clientName(), injuryDate: "2025-03-14" });
   await page.goto(`/#/matters/${matter.id}`);

@@ -115,6 +115,9 @@ label.check input { width: auto; }
 
 .modal-back { position: fixed; inset: 0; background: rgb(0 0 0 / 35%); display: grid; place-items: center; z-index: 20; padding: 1rem; }
 .modal { background: var(--surface); border-radius: 10px; padding: 1.25rem; width: min(640px, 100%); max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 30px rgb(0 0 0 / 25%); }
+.modal:focus, .sheet:focus { outline: none; }
+.modal-head { display: flex; gap: 0.5rem; justify-content: space-between; align-items: flex-start; }
+.modal-head h2 { margin: 0; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
 
 .toasts { pointer-events: none; position: fixed; right: 1rem; bottom: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 30; max-width: 380px; }
@@ -137,17 +140,74 @@ label.check input { width: auto; }
 .kv dd { margin: 0; }
 
 @media (max-width: 900px) {
-  .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-  .nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); padding: 0.5rem; }
-  .nav .firm, .nav .spacer, .nav .user .who { display: none; }
-  .nav .user { border-top: 0; margin-top: 0; padding: 0 0.5rem; display: flex; align-items: center; white-space: nowrap; }
-  .main { padding: 1rem; }
   /* iOS zooms into any field under 16px when it gets focus. */
   input, select, textarea { font-size: 16px; }
   button, .btn, input, select { min-height: 44px; }
   .tabs button { min-height: 44px; }
-  .chat { position: fixed; inset: 0; width: auto; z-index: 25; }
 }
+
+/* Phone: app frame
+ * Under 900px the sidebar gives way to a slim top bar, a bottom tab bar (Today, Matters, Approvals,
+ * Diary, More) and a More sheet. Under 640px dialogs fill the screen. Bars, sheets, dialogs, the
+ * assistant and toasts keep clear of the notch and home indicator (viewport-fit=cover in index.html). */
+.topbar, .tabbar { display: none; }
+@media (max-width: 900px) {
+  :root { --tabbar-h: 3.5rem; --tabbar-space: calc(var(--tabbar-h) + env(safe-area-inset-bottom)); }
+  .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .nav { display: none; }
+
+  .topbar { display: flex; align-items: baseline; gap: 0.6rem; min-width: 0; background: var(--surface); border-bottom: 1px solid var(--border); padding: calc(0.7rem + env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) 0.7rem max(1rem, env(safe-area-inset-left)); }
+  .topbar .brand { font-weight: 700; font-size: 1.05rem; }
+  .topbar .where { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .main { padding: 1rem max(1rem, env(safe-area-inset-right)) calc(var(--tabbar-space) + 1.5rem) max(1rem, env(safe-area-inset-left)); }
+
+  .tabbar { display: flex; justify-content: center; position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; background: var(--surface); border-top: 1px solid var(--border); box-shadow: 0 -1px 3px rgb(16 24 40 / 6%); padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  .tabbar > a, .tabbar > button { position: relative; flex: 1 1 0; min-width: 0; max-width: 9rem; min-height: var(--tabbar-h); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.15rem; padding: 0.3rem 0.15rem; margin: 0; background: none; border: 0; border-radius: 0; color: var(--muted); font: 500 0.75rem/1.2 var(--font); text-decoration: none; -webkit-tap-highlight-color: transparent; }
+  .tabbar > a > span:not(.count), .tabbar > button > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tabbar svg { width: 24px; height: 24px; flex: none; }
+  .tabbar .active { color: var(--accent); font-weight: 700; }
+  .tabbar .active::before { content: ""; position: absolute; top: -1px; left: 22%; right: 22%; height: 3px; border-radius: 0 0 3px 3px; background: var(--accent); }
+  .tabbar .count { position: absolute; top: 0.2rem; left: calc(50% + 0.35rem); min-width: 1.15rem; padding: 0 0.3rem; line-height: 1.15rem; font-size: 0.68rem; font-weight: 700; text-align: center; border: 2px solid var(--surface); box-sizing: content-box; }
+
+  .sheet-back { position: fixed; inset: 0; z-index: 20; background: rgb(0 0 0 / 35%); display: flex; flex-direction: column; justify-content: flex-end; }
+  .sheet { background: var(--surface); border-radius: 14px 14px 0 0; box-shadow: 0 -6px 24px rgb(0 0 0 / 20%); max-height: calc(100dvh - 2rem - env(safe-area-inset-top)); overflow-y: auto; overscroll-behavior: contain; padding: 0.25rem max(0.75rem, env(safe-area-inset-right)) calc(0.75rem + env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left)); animation: sheet-in 160ms ease-out; }
+  .sheet-head { display: flex; align-items: center; justify-content: space-between; padding-left: 0.5rem; }
+  .sheet-head h2 { margin: 0; font-size: 1.1rem; }
+  .sheet-who { display: flex; flex-direction: column; padding: 0.25rem 0.5rem 0.75rem; overflow-wrap: anywhere; }
+  .sheet-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 0.75rem; }
+  .sheet-list > a, .sheet-list > button { min-height: 48px; display: flex; align-items: center; justify-content: flex-start; padding: 0 0.9rem; margin: 0; border: 0; border-radius: 0; border-top: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 1rem; text-align: left; text-decoration: none; }
+  .sheet-list > :first-child { border-top: 0; }
+  .sheet-list > a.active { color: var(--accent); font-weight: 600; background: var(--accent-soft); }
+  .sheet-list > .sign-out { color: var(--danger); }
+
+  .toasts { left: max(1rem, env(safe-area-inset-left)); right: max(1rem, env(safe-area-inset-right)); bottom: calc(var(--tabbar-space) + 0.75rem); max-width: none; }
+
+  .chat { position: fixed; inset: 0; width: auto; height: 100vh; height: 100dvh; z-index: 25; border-left: 0; }
+  .chat header { padding: calc(0.25rem + env(safe-area-inset-top)) max(0.25rem, env(safe-area-inset-right)) 0.25rem max(1rem, env(safe-area-inset-left)); }
+  .chat .log { padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right)); }
+  .chat form { padding: 0.6rem max(0.75rem, env(safe-area-inset-right)) calc(0.6rem + env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left)); }
+  .chat form textarea { min-height: 44px; height: 44px; }
+  .modal-close { width: 44px; height: 44px; justify-content: center; flex: none; font-size: 1.1rem; }
+
+  /* Today: the four counts as a two by two grid. */
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+}
+@media (max-width: 640px) {
+  .stats .card { padding: 0.7rem 0.8rem; display: flex; flex-direction: column; justify-content: space-between; gap: 0.2rem; }
+  .stats .stat { font-size: 1.3rem; line-height: 1.2; }
+
+  /* Dialogs fill the screen: the title bar stays put, the body scrolls, and a closing row of actions stays in view. */
+  .modal-back { padding: 0; place-items: stretch; }
+  .modal, .modal.wide { width: 100%; height: 100vh; height: 100dvh; max-height: none; border-radius: 0; padding: 0; box-shadow: none; display: flex; flex-direction: column; overflow: hidden; }
+  .modal-head { position: sticky; top: 0; flex: none; align-items: center; background: var(--surface); border-bottom: 1px solid var(--border); padding: env(safe-area-inset-top) max(0.25rem, env(safe-area-inset-right)) 0 max(1rem, env(safe-area-inset-left)); }
+  .modal-head h2 { flex: 1; min-width: 0; font-size: 1.05rem; padding: 0.6rem 0; }
+  .modal-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 1rem max(1rem, env(safe-area-inset-right)) calc(1rem + env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left)); }
+  .modal-body:has(> .modal-actions:last-child, > form:last-child > .modal-actions:last-child) { padding-bottom: 0; }
+  .modal-body > .modal-actions:last-child, .modal-body > form:last-child > .modal-actions:last-child { position: sticky; bottom: 0; z-index: 1; background: var(--surface); border-top: 1px solid var(--border); margin: 1rem calc(-1 * max(1rem, env(safe-area-inset-right))) 0 calc(-1 * max(1rem, env(safe-area-inset-left))); padding: 0.6rem max(1rem, env(safe-area-inset-right)) calc(0.6rem + env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left)); }
+  .modal-body > .modal-actions:last-child > button, .modal-body > form:last-child > .modal-actions:last-child > button { flex: 1; justify-content: center; }
+}
+@keyframes sheet-in { from { transform: translateY(100%); } }
+@media (prefers-reduced-motion: reduce) { .sheet { animation: none; } }
 
 a.card { color: inherit; display: block; }
 a.card:hover { text-decoration: none; border-color: var(--accent); }
