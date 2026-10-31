@@ -14,6 +14,7 @@ export const LAST_SEEN_EVERY_MS = 5 * 60_000;
 export const SESSION_KIND = "session";
 export const API_KEY_KIND = "api_key";
 export const OAUTH_TOKEN_KIND = "oauth_token";
+export const OAUTH_CODE_KIND = "oauth_code";
 
 /** The fields of an MCP OAuth token (src/auth/mcp-oauth.ts) needed to revoke a user's tokens. */
 interface OAuthTokenRecord {
@@ -120,8 +121,28 @@ export const sessionIsActive = (s: Session, now = new Date()): boolean => s.expi
 export const sessionsOf = (store: Store) => store.collection<Session>(SESSION_KIND);
 
 /** Ends one session: it stops authenticating at once (the browser is signed out on its next request). */
+/** Ends a session and forgets where it was used: an ended session needs no device or network (APP 11.2). */
 export function endSession(store: Store, s: Session, reason: SessionEndReason): Session {
-  return sessionsOf(store).set({ ...s, expiresAt: new Date(0).toISOString(), endedAt: new Date().toISOString(), endedReason: reason });
+  return sessionsOf(store).set({
+    ...s,
+    device: undefined,
+    network: undefined,
+    expiresAt: new Date(0).toISOString(),
+    endedAt: new Date().toISOString(),
+    endedReason: reason,
+  });
+}
+
+/** Clears the device and network of sessions that ran out on their own; run regularly by the job scheduler. */
+export function forgetExpiredSessionDetails(store: Store, now = new Date()): number {
+  let cleared = 0;
+  for (const s of [...sessionsOf(store).values()]) {
+    if ((s.device || s.network) && !sessionIsActive(s, now)) {
+      sessionsOf(store).set({ ...s, device: undefined, network: undefined });
+      cleared++;
+    }
+  }
+  return cleared;
 }
 
 /** A user's sessions that still authenticate, most recently used first. */
@@ -162,6 +183,9 @@ export function revokeUserAccess(store: Store, tenantId: string, userId: string,
     if (t.expiresAt > now) clients.add(t.clientId);
     tokens.set({ ...t, revoked: true });
   }
+  // Sign-in codes handed out but not yet exchanged would otherwise become fresh tokens after this.
+  const codes = store.collection<{ id: string; tenantId: string; userId: string; used: boolean }>(OAUTH_CODE_KIND);
+  for (const c of codes.list(tenantId, (c) => c.userId === userId && !c.used)) codes.set({ ...c, used: true });
   const keys = store.collection<ApiKey>(API_KEY_KIND);
   const live = keys.list(tenantId, (k) => k.userId === userId && !k.revokedAt);
   const at = new Date().toISOString();

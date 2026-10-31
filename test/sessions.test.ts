@@ -5,7 +5,7 @@ import { settingsFor, type TenantSettings } from "../src/admin/settings.js";
 import { PractyOAuthProvider } from "../src/auth/mcp-oauth.js";
 import type { Session } from "../src/auth/model.js";
 import { AuthService } from "../src/auth/service.js";
-import { describeDevice, LAST_SEEN_EVERY_MS, OAUTH_TOKEN_KIND, truncateIp } from "../src/auth/sessions.js";
+import { describeDevice, forgetExpiredSessionDetails, LAST_SEEN_EVERY_MS, OAUTH_CODE_KIND, OAUTH_TOKEN_KIND, truncateIp } from "../src/auth/sessions.js";
 import type { Actor, InvocationContext, Surface } from "../src/core/types.js";
 import { as, setup, TENANT, users } from "./helpers.js";
 
@@ -185,6 +185,8 @@ describe("sign-in session commands", () => {
     for (const s of sessions) expect(auth.session(s.raw)).toBeUndefined();
     expect(auth.sessions.get(hash(sessions[0]!.raw))).toMatchObject({ endedReason: "ended_by_principal" });
     await expect(oauth.verifyAccessToken(access)).rejects.toThrow();
+    const client = { client_id: "client-1", redirect_uris: ["http://localhost:7777/cb"] } as any;
+    await expect(oauth.exchangeRefreshToken(client, "pr_test-refresh")).rejects.toThrow();
     expect(auth.apiKeyUser(apiKey)).toBeUndefined();
     // Nobody else is touched, and the user is still active (they can sign in again).
     expect(auth.session(principal.raw)).toBeDefined();
@@ -192,6 +194,50 @@ describe("sign-in session commands", () => {
     expect(usersOf(app.store).get(solicitor.id)!.active).toBe(true);
     // A principal ends their own other sessions with end_other_sessions, not here.
     await expect(exec("end_user_sessions", { userId: users.principal.userId }, principal.ctx())).rejects.toMatchObject({ code: "invalid" });
+  });
+
+  it("will not exchange a sign-in code handed out before the user was signed out everywhere", async () => {
+    const { app, exec, signIn, auth } = world();
+    const principal = signIn(users.principal);
+    const solicitor = usersOf(app.store).get(users.solicitor.userId)!;
+    const settings = app.store.collection<TenantSettings>("tenant_settings");
+    settings.set({ ...settingsFor(app.store, TENANT), ai: { ...settingsFor(app.store, TENANT).ai, externalMcpClients: true } });
+    const oauth = new PractyOAuthProvider(app.store, auth);
+    const client = { client_id: "client-1", redirect_uris: ["http://localhost:7777/cb"] } as any;
+    const code = (raw: string, userId: string) =>
+      app.store.collection<any>(OAUTH_CODE_KIND).set({ id: hash(raw), tenantId: TENANT, clientId: "client-1", userId, codeChallenge: "x", redirectUri: "http://localhost:7777/cb", expiresAt: Date.now() + 300_000, used: false });
+    code("code-before", solicitor.id);
+    await exec("end_user_sessions", { userId: solicitor.id }, principal.ctx());
+    await expect(oauth.exchangeAuthorizationCode(client, "code-before")).rejects.toThrow();
+    // A code for someone made inactive since is refused too.
+    code("code-inactive", users.paralegal.userId);
+    usersOf(app.store).set({ ...usersOf(app.store).get(users.paralegal.userId)!, active: false });
+    await expect(oauth.exchangeAuthorizationCode(client, "code-inactive")).rejects.toThrow(/no longer active/);
+  });
+
+  it("forgets the device and network of a session once it has ended or expired", async () => {
+    const { app, exec, signIn, auth } = world();
+    const desk = signIn(users.principal, { userAgent: MAC_SAFARI, ip: "203.0.113.45" });
+    const phone = signIn(users.principal, { userAgent: IPHONE, ip: "198.51.100.7" });
+    const ended = (await exec<any[]>("list_my_sessions", {}, desk.ctx())).find((s) => !s.current);
+    await exec("end_session", { sessionId: ended.id }, desk.ctx());
+    expect(auth.sessions.get(hash(phone.raw))).toMatchObject({ endedReason: "ended_by_user" });
+    expect(auth.sessions.get(hash(phone.raw))!.device).toBeUndefined();
+    expect(auth.sessions.get(hash(phone.raw))!.network).toBeUndefined();
+    // One that simply ran out is cleared by the hourly job; an active one keeps its details.
+    const later = signIn(users.solicitor, { userAgent: WINDOWS_CHROME, ip: "192.0.2.10" });
+    auth.sessions.set({ ...auth.sessions.get(hash(later.raw))!, expiresAt: new Date(Date.now() - 1000).toISOString() });
+    expect(forgetExpiredSessionDetails(app.store)).toBe(1);
+    expect(auth.sessions.get(hash(later.raw))!.device).toBeUndefined();
+    expect(auth.sessions.get(hash(desk.raw))).toMatchObject({ device: "Safari on Mac", network: "203.0.113.0/24" });
+  });
+
+  it("will not sign out every device from an API key", async () => {
+    const { run, signIn, auth } = world();
+    const desk = signIn(users.principal);
+    const phone = signIn(users.principal, { userAgent: IPHONE });
+    await expect(run("end_other_sessions", {}, { actor: users.principal, surface: "api" })).rejects.toMatchObject({ code: "invalid" });
+    for (const s of [desk, phone]) expect(auth.session(s.raw)).toBeDefined();
   });
 
   it("ends a deactivated user's sessions, so reactivating them revives nothing", async () => {

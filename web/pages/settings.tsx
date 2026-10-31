@@ -116,7 +116,9 @@ function Users() {
       {principal && (
         <p className="muted small">
           Sign out everywhere ends all of that person's sign-in sessions, disconnects AI clients they connected and revokes their API keys: use it for a lost phone or when
-          someone leaves. They can sign in again unless you also make them inactive (which signs them out everywhere too).
+          someone leaves. They can sign in again unless you also make them inactive (which signs them out everywhere too). For a lost or stolen phone this is not enough
+          on its own: the phone is still signed in to the firm's Google or Microsoft account and can sign straight back in, so also sign the person out there or reset their
+          password.
         </p>
       )}
       <Loading state={users}>
@@ -194,6 +196,10 @@ function Sessions() {
       <p className="muted small">
         Each browser or phone you sign in on has its own session. If a device is lost, or you signed in on a shared computer, end its session here: it is signed out the
         next time it does anything. Locations are approximate: the network the device signed in from, with the last part of the address removed.
+      </p>
+      <p className="muted small">
+        If a phone is lost or stolen, tell a principal as well: ending the session here does not sign the phone out of the firm's Google or Microsoft account, so it could
+        sign straight back in until the firm signs you out there too.
       </p>
       <div className="row">
         <button className="secondary" disabled={!others} onClick={() => void endOthers()}>

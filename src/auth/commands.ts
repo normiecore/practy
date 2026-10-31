@@ -68,11 +68,15 @@ export function sessionCommands(store: Store) {
     defineCommand({
       name: "end_other_sessions",
       title: "Sign out all other devices",
-      description: "Sign out every one of your sessions except the one making this request. From the REST API, which has no session, that is all of them.",
+      description: "Sign out every one of your sessions except the one making this request. Only from a signed-in browser: an API key has no session to keep, so use end_session there.",
       tier: 1,
       humanOnly: true,
       input: z.object({}),
-      handler: (_i, ctx) => ({ ended: endSessionsOf(store, ctx.actor.tenantId, ctx.actor.userId, "ended_by_user", ctx.sessionId) }),
+      handler: (_i, ctx) => {
+        // From an API key this would end every browser session, which a script should not do by accident.
+        if (!ctx.sessionId) throw invalid("Sign out all other devices works from a signed-in browser. With an API key, end sessions one at a time with end_session.");
+        return { ended: endSessionsOf(store, ctx.actor.tenantId, ctx.actor.userId, "ended_by_user", ctx.sessionId) };
+      },
     }),
 
     defineCommand({

@@ -4,6 +4,7 @@ import type { Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { fyEndDate, TAX_TABLES } from "../damages/tables.js";
 import { usersOf } from "../admin/commands.js";
 import type { User } from "../auth/model.js";
 import { DevOidcProvider } from "../auth/oidc.js";
@@ -282,7 +283,7 @@ export async function seedDemo(app: App, opts: { tenantId?: string; env?: NodeJS
   await s.run("solicitor", "compute_damages", {
     matterId: m2Id,
     plaintiff: { sex: "female", background: "retail work background" },
-    calculationDate: today,
+    calculationDate: damagesDate(today),
     preInjuryEarnings: { grossWeeklyCents: 128_500, source: "Sample payslips before the accident" },
     unindemnifiedPeriods: [{ from: m2Injury, to: addDays(m2Injury, 111), note: "Off work, then returned on reduced hours" }],
     specialDamages: [
@@ -466,6 +467,16 @@ export interface DemoServer {
  * close, and the development sign-in as the only way in. Uses PORT, PRACTY_BASE_URL,
  * PRACTY_TENANT_ID and PRACTY_WEB_DIR like `npm start`; no other configuration is read.
  */
+/**
+ * The damages calculation date: today, but never past the last financial year Practy has income tax
+ * rates for, so the demo keeps working after 30 June of that year until the next table is added.
+ */
+export function damagesDate(today: string): string {
+  const lastYear = Math.max(...TAX_TABLES.map((t) => t.financialYear));
+  const lastDay = fyEndDate(lastYear);
+  return today > lastDay ? lastDay : today;
+}
+
 export async function startDemo(env: NodeJS.ProcessEnv = process.env): Promise<DemoServer> {
   const refusal = demoRefusal(env);
   if (refusal) throw new Error(refusal);
@@ -476,7 +487,9 @@ export async function startDemo(env: NodeJS.ProcessEnv = process.env): Promise<D
     const app = createApp({ localDocumentsRoot: documentsRoot });
     const summary = await seedDemo(app, { tenantId, env });
     const auth = new AuthService(app.store, new Map([["dev", new DevOidcProvider()]]), { baseUrl, defaultTenantId: tenantId });
-    const server = createHttpServer(app, { auth, baseUrl, webDir, secureCookies: baseUrl.startsWith("https://") }).listen(port);
+    // Only this computer by default: the demo signs anyone in as the sample principal, so it must not be
+    // reachable from the network unless someone deliberately sets HOST.
+    const server = createHttpServer(app, { auth, baseUrl, webDir, secureCookies: baseUrl.startsWith("https://") }).listen(port, env.HOST ?? "127.0.0.1");
     await new Promise<void>((resolve, reject) => {
       server.once("listening", resolve);
       server.once("error", reject);

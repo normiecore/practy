@@ -218,7 +218,9 @@ describe("MCP OAuth for external AI clients", () => {
     const challenge = createHash("sha256").update("v").digest("base64url");
     const a = await get(`${base}/authorize?response_type=code&client_id=${reg.client_id}&redirect_uri=${encodeURIComponent("https://attacker.example/cb")}&code_challenge=${challenge}&code_challenge_method=S256`);
     const cookie = await signIn(base, "u-sol@soullegal.com.au");
-    const page = await (await get(`${base}${a.headers.get("location")!}`, cookie)).text();
+    const consent = await get(`${base}${a.headers.get("location")!}`, cookie);
+    expect(consent.headers.get("cache-control")).toBe("no-store");
+    const page = await consent.text();
     expect(page).toContain("<strong>attacker.example</strong>");
     expect(page).toContain(reg.client_id);
     expect(page).toContain("Unverified client");

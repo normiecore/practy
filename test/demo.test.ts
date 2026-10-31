@@ -12,7 +12,7 @@ import type { TimeEntry } from "../src/costs/time.js";
 import type { MatterDocument } from "../src/documents/model.js";
 import { Store } from "../src/domain/store.js";
 import { createApp } from "../src/server/app.js";
-import { DEMO_FIRM_NAME, DEMO_STAFF, demoRefusal, seedDemo, startDemo, type DemoServer } from "../src/server/demo.js";
+import { DEMO_FIRM_NAME, DEMO_STAFF, demoRefusal, seedDemo, startDemo, type DemoServer, damagesDate } from "../src/server/demo.js";
 
 const dirs: string[] = [];
 const servers: DemoServer[] = [];
@@ -183,6 +183,13 @@ describe("demo sample data", () => {
     await expect(seedDemo(app, { env: {} })).rejects.toThrow(/already has/);
   });
 
+  it("keeps the damages date within the years Practy has tax rates for", () => {
+    expect(damagesDate("2026-11-01")).toBe("2026-11-01");
+    const last = damagesDate("2099-01-01");
+    expect(last < "2099-01-01").toBe(true);
+    expect(last).toMatch(/^\d{4}-06-30$/);
+  });
+
   it("serves the sample firm with the development sign-in only", async () => {
     // Reserve a free port, since the server's sign-in URLs are absolute.
     const probe = createServer().listen(0);
@@ -194,6 +201,8 @@ describe("demo sample data", () => {
     const demo = await startDemo({ PORT: String(port), PRACTY_BASE_URL: base, PRACTY_WEB_DIR: join(tmpdir(), "practy-demo-no-web") });
     servers.push(demo);
     expect(demo.signInUrl).toBe(`${base}/auth/login/dev`);
+    // Signed in as the sample principal by anyone who can reach it, so only this computer by default.
+    expect((demo.server.address() as AddressInfo).address).toBe("127.0.0.1");
     expect(demo.webBuilt).toBe(false);
     expect(await (await fetch(`${base}/auth/providers`)).json()).toEqual([{ id: "dev", label: "Development login" }]);
 

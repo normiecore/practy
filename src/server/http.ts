@@ -347,6 +347,8 @@ export function createHttpServer(app: App, opts: HttpOptions) {
   http.use(mcpAuthRouter({ provider: oauth, issuerUrl: issuer, resourceServerUrl: mcpUrl, scopesSupported: ["practy"], resourceName: "Practy" }));
 
   http.get("/oauth/consent", (req, res) => {
+    // Shows the signed-in person's name and email and carries a CSRF token: never cache it.
+    res.setHeader("Cache-Control", "no-store");
     const id = String(req.query.request ?? "");
     const pending = oauth.pendingRequest(id);
     if (!pending) {

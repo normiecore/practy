@@ -8,7 +8,7 @@ import type { OAuthClientInformationFull, OAuthTokens } from "@modelcontextproto
 import { settingsFor } from "../admin/settings.js";
 import type { Store } from "../domain/store.js";
 import { parseCookies, SESSION_COOKIE, type AuthService } from "./service.js";
-import { OAUTH_TOKEN_KIND } from "./sessions.js";
+import { OAUTH_CODE_KIND, OAUTH_TOKEN_KIND } from "./sessions.js";
 
 /**
  * OAuth 2.1 authorization server for MCP clients (Claude Desktop, claude.ai, Claude Code).
@@ -101,7 +101,7 @@ export class PractyOAuthProvider implements OAuthServerProvider {
     private readonly auth: AuthService,
   ) {
     this.clients = store.collection<StoredClient>("oauth_client");
-    this.codes = store.collection<IssuedCode>("oauth_code");
+    this.codes = store.collection<IssuedCode>(OAUTH_CODE_KIND);
     this.tokens = store.collection<IssuedToken>(OAUTH_TOKEN_KIND);
   }
 
@@ -211,6 +211,7 @@ export class PractyOAuthProvider implements OAuthServerProvider {
   async exchangeAuthorizationCode(client: OAuthClientInformationFull, code: string, _verifier?: string, redirectUri?: string): Promise<OAuthTokens> {
     const c = this.code(client, code);
     if (redirectUri && redirectUri !== c.redirectUri) throw new InvalidGrantError("redirect_uri mismatch");
+    if (!this.auth.userById(c.userId)) throw new InvalidGrantError("User is no longer active");
     this.codes.set({ ...c, used: true });
     const tokens = this.issue(c.tenantId, c.clientId, c.userId, c.resource, c.redirectUri);
     await this.store.flush();

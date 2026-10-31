@@ -47,10 +47,11 @@ Each fix has a test that fails without it. A second reviewer re-ran the original
 - Matters created before this fix with a look-alike number are not migrated. Check existing matter numbers at onboarding.
 - Error messages returned to the assistant are not scanned for matter references. Errors for hidden matters are generic "not found", so this is low risk.
 - AI exclusions follow copies by content hash (and by email message and file name). A copy whose bytes differ, such as a re-rendered or edited PDF, is not linked to the excluded original.
-- The earlier gap of no way to sign out a lost device is closed (sign-in sessions above). What remains:
+- Practy sessions can now be ended remotely (sign-in sessions above). What remains:
+  - ending a Practy session does not sign the device out of the firm's Google or Microsoft account. Sign-in uses account selection, not a fresh password, so whoever holds a lost phone can sign straight back in. For a lost or stolen device the firm must also sign the person out at the identity provider (Google Workspace Admin: the user, then Sign-in cookies, Reset; Microsoft Entra: the user, then Revoke sessions) or reset their password;
   - an ended session stops working on its next request, but a page already open on that device keeps showing what it last loaded until then;
-  - sessions still last a fixed 12 hours with no idle timeout;
+  - sessions last a fixed lifetime (12 hours by default) with no idle timeout;
   - the device description comes from the browser's User-Agent, which the browser controls, so it identifies a device for its owner but proves nothing;
   - the location is only the network (IPv4 /24, IPv6 /48), and behind a proxy it is only as good as the proxy's forwarded address;
-  - ended and expired session records, with their device description and network, are kept until a retention sweep is added.
+  - an ended session forgets its device and network at once, and an expired one within the hour; the bare record (who, when) is kept for the audit trail.
 - The independent penetration test is still required before go-live.
