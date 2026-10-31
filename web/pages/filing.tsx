@@ -49,7 +49,7 @@ export function Filing() {
         {() =>
           queue.data!.length ? (
             <div className="table-wrap">
-              <table>
+              <table className="card-table">
                 <thead>
                   <tr>
                     <th>Received</th>
@@ -63,22 +63,24 @@ export function Filing() {
                     const selected = choice[i.id] ?? i.candidates[0] ?? "";
                     return (
                       <tr key={i.id}>
-                        <td className="small">{new Date(i.date).toLocaleString("en-AU")}</td>
-                        <td>
+                        <td data-label="Received" className="small">
+                          {new Date(i.date).toLocaleString("en-AU")}
+                        </td>
+                        <td data-label="Email" className="primary">
                           <strong>{i.subject || "(no subject)"}</strong>
                           <div className="hint">{i.from}</div>
                         </td>
-                        <td className="small">
+                        <td data-label="Why" className="small wide">
                           {i.evidence.join("; ") || "—"}
                           <div className="hint">Confidence {Math.round(i.confidence * 100)}%</div>
                           {i.error && <Badge value={i.error} tone="danger" />}
                         </td>
-                        <td>
+                        <td data-label={i.status === "filed" ? "Matter" : "File to"} className={i.status === "filed" && i.matterId ? undefined : "actions"}>
                           {i.status === "filed" && i.matterId ? (
                             <a href={href("matters", i.matterId, "documents")}>{label(i.matterId)}</a>
                           ) : (
                             <div className="row">
-                              <select value={selected} onChange={(e) => setChoice({ ...choice, [i.id]: e.target.value })} aria-label="Matter" style={{ maxWidth: 260 }}>
+                              <select value={selected} onChange={(e) => setChoice({ ...choice, [i.id]: e.target.value })} aria-label="Matter" className="file-to">
                                 <option value="">Choose matter…</option>
                                 {i.candidates.length > 0 && (
                                   <optgroup label="Suggested">

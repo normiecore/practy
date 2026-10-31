@@ -220,6 +220,7 @@ export const TIER_LABEL: Record<number, string> = { 0: "Read", 1: "Draft", 2: "P
 
 const HIDDEN = new Set(["tenantId", "sha1", "storeFileId", "folderId"]);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const PRIMARY = ["title", "name", "displayName", "subject"];
 const isIsoDate = (v: unknown) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}(T|$)/.test(v);
 const label = (k: string) =>
   k
@@ -248,9 +249,12 @@ export function Value({ value, name = "" }: { value: unknown; name?: string }): 
     const cols = [...new Set(value.flatMap((r) => (r && typeof r === "object" ? Object.keys(r) : [])))].filter(
       (k) => !HIDDEN.has(k) && k !== "id" && !k.endsWith("Id"),
     );
+    // On a phone each row is a card (.card-table); a naming column, if any, heads the card.
+    const primary = PRIMARY.find((k) => cols.includes(k));
+    const cellClass = (c: string) => [/Cents$/.test(c) && "num", c === primary && "primary"].filter(Boolean).join(" ") || undefined;
     return (
       <div className="table-wrap">
-        <table>
+        <table className="card-table">
           <thead>
             <tr>
               {cols.map((c) => (
@@ -264,7 +268,7 @@ export function Value({ value, name = "" }: { value: unknown; name?: string }): 
             {value.map((r, i) => (
               <tr key={(r as any)?.id ?? i}>
                 {cols.map((c) => (
-                  <td key={c} className={/Cents$/.test(c) ? "num" : undefined}>
+                  <td key={c} data-label={label(c)} className={cellClass(c)}>
                     <Value value={(r as any)?.[c]} name={c} />
                   </td>
                 ))}

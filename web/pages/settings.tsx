@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ApiError } from "../api";
 import { CommandForm } from "../command-form";
 import { FirmSettingsForm } from "./firm-settings-form";
-import { DedicatedFormButton, FormButton } from "./matter";
+import { DedicatedFormButton, FormButton, SectionTabs } from "./matter";
 import { href, Loading, useLoad, useToast, Value } from "../ui";
 import { currentSession } from "../api";
 
@@ -31,13 +31,7 @@ export function Settings({ tab = "firm" }: { tab?: string }) {
           <p className="muted">Firm configuration. Changes to firm settings and users need practitioner approval.</p>
         </div>
       </div>
-      <div className="tabs" role="tablist">
-        {TABS.map(([k, label]) => (
-          <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "active" : undefined} onClick={() => (location.hash = href("settings", k))}>
-            {label}
-          </button>
-        ))}
-      </div>
+      <SectionTabs tabs={TABS} current={tab} onSelect={(k) => (location.hash = href("settings", k))} />
       {tab === "firm" && <Firm />}
       {tab === "users" && <Users />}
       {tab === "integrations" && <Integrations />}

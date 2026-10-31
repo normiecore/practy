@@ -25,7 +25,7 @@ export function DateTable({ rows, empty }: { rows: DigestDate[]; empty: string }
   if (!rows.length) return <p className="muted">{empty}</p>;
   return (
     <div className="table-wrap">
-      <table>
+      <table className="card-table">
         <thead>
           <tr>
             <th>Date</th>
@@ -37,14 +37,14 @@ export function DateTable({ rows, empty }: { rows: DigestDate[]; empty: string }
         <tbody>
           {rows.map((k) => (
             <tr key={k.id}>
-              <td>{date(k.date)}</td>
-              <td>
+              <td data-label="Date">{date(k.date)}</td>
+              <td data-label="Matter">
                 <a href={href("matters", k.matterId, "dates")}>{k.matterNumber}</a> <span className="muted small">{k.matterTitle}</span>
               </td>
-              <td>
+              <td data-label="Key date" className="primary">
                 {k.title} {k.kind === "critical" && <Badge value="critical" />}
               </td>
-              <td>
+              <td data-label="Status">
                 <Badge value={k.status} />
               </td>
             </tr>

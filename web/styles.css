@@ -240,6 +240,82 @@ label.field > span.hint { display: block; font-weight: 400; font-size: 0.8rem; m
   .rows-table td.cell-money input, .rows-table td.cell-number input { text-align: left; }
   .rows-table td.cell-remove { text-align: right; }
 }
+
+/* Phone: page content */
+/* These first rules keep desktop as it was; everything else here applies to narrow screens only. */
+.row.nowrap { flex-wrap: nowrap; }
+.filters .filter-search { max-width: 360px; }
+.filters .filter-scheme { max-width: 220px; }
+select.file-to { max-width: 260px; }
+label.section-picker, .card-table .card-only { display: none; }
+
+@media (max-width: 900px) {
+  /* Long tab strips give no sign that more tabs exist: a labelled picker replaces them (SectionTabs). */
+  .tabs.has-picker { display: none; }
+  label.section-picker { display: block; margin: 0.5rem 0 1rem; }
+  /* Search and filter share one row and wrap when there is no room. */
+  .filters .filter-search { flex: 1 1 8rem; width: auto; min-width: 0; max-width: none; }
+  .filters .filter-scheme { flex: 0 1 auto; width: auto; min-width: 0; max-width: 60%; }
+  /* Tap targets at least 44px tall. */
+  .crumbs { margin: 0; }
+  .crumbs a, .approval-meta a { display: inline-flex; align-items: center; min-height: 44px; }
+}
+
+@media (max-width: 640px) {
+  /*
+   * Tables become one card per row, as .rows-table does: the header hides and each cell shows its
+   * data-label beside the value. The naming cell (.primary) heads the card and actions (.actions) sit
+   * at its foot. The markup stays a real table for desktop and screen readers.
+   */
+  .card-table, .card-table tbody { display: block; width: 100%; }
+  .card-table { border: 0; border-radius: 0; background: none; overflow: visible; }
+  .card-table thead { display: none; }
+  .table-wrap:has(> .card-table) { overflow: visible; }
+  .card-table tr { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 0.55rem 0.75rem; margin-bottom: 0.6rem; }
+  .card-table td, .card-table tbody th { display: flow-root; border: 0; padding: 0.15rem 0 0.15rem 7rem; min-width: 0; text-align: left; overflow-wrap: anywhere; }
+  .card-table td[data-label]::before { content: attr(data-label); float: left; width: 6.5rem; margin-left: -7rem; color: var(--muted); font-size: 0.8rem; font-weight: 400; line-height: 1.65; }
+  .card-table td:empty { display: none; }
+  .card-table td.num { text-align: left; }
+  .card-table td.primary { order: -1; padding: 0 0 0.3rem; font-weight: 600; }
+  .card-table td.primary .hint, .card-table td.primary .badge { font-weight: 400; }
+  .card-table td.primary::before, .card-table td.actions::before { content: none; }
+  .card-table td.primary button.ghost { padding-left: 0; font-weight: 600; }
+  /* Long prose uses the full width, with its label above. */
+  .card-table td.wide { padding-left: 0; }
+  .card-table td.wide::before { float: none; display: block; width: auto; margin: 0; }
+  .card-table td.actions { order: 1; padding: 0.5rem 0 0; margin-top: 0.35rem; border-top: 1px solid var(--border); }
+  .card-table td.actions .row { flex-wrap: wrap; }
+  .card-table td.actions select { flex: 1 1 100%; max-width: none; }
+  .card-table button { white-space: normal; text-align: left; }
+  .card-table td a { display: inline-flex; align-items: center; min-height: 44px; }
+  /* A matter title after its number link goes on the next line rather than wrapping beside a tall link. */
+  .card-table td a + .muted { display: block; }
+  /* Long document names wrap but stop at three lines; the title attribute holds the full name. */
+  .card-table td a.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; min-height: 44px; padding-block: 0.6rem; }
+
+  /* Damages heads: one card of "head, item: amount" lines, as in the particulars, then the totals. */
+  .damages-table tbody { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 0 0.75rem; }
+  .damages-table tr { flex-direction: row; align-items: baseline; gap: 0.6rem; background: none; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; box-shadow: none; margin: 0; padding: 0.5rem 0; }
+  .damages-table tr:last-child { border-bottom: 0; }
+  .damages-table td, .damages-table tbody th { padding: 0; background: none; color: var(--text); font-size: inherit; text-transform: none; letter-spacing: 0; }
+  .damages-table td[data-label]::before { content: none; }
+  .damages-table td:first-child { flex: 0 0 2rem; color: var(--muted); }
+  .damages-table td.primary { order: 0; flex: 1 1 0; padding: 0; font-weight: 400; }
+  .damages-table td.num, .damages-table th.num { flex-shrink: 0; margin-left: auto; text-align: right; white-space: nowrap; }
+  .damages-table tr:not(.total) + tr.total { border-top: 1px solid var(--muted); }
+
+  /* Matters: one link carries number and title; scheme and status as badges, then the injury date. */
+  .matters-table tr { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.5rem; }
+  .matters-table td { padding: 0; }
+  .matters-table td[data-label]::before { float: none; display: inline; width: auto; margin: 0 0.3rem 0 0; }
+  .matters-table td.matter-no { display: none; }
+  .matters-table td.primary { flex: 1 1 100%; padding: 0; }
+  .matters-table td a.matter-link { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-height: 44px; }
+  .matters-table .card-only { display: block; font-size: 0.8rem; font-weight: 400; color: var(--muted); }
+  .matters-table td.scheme::before, .matters-table td.status::before { content: none; }
+  .matters-table td[data-label="Injury date"] { order: 1; }
+  .matters-table td.scheme span { display: inline-block; font-size: 0.75rem; padding: 0.05rem 0.5rem; border-radius: 999px; background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); white-space: nowrap; }
+}
 .field-error { display: block; color: var(--danger); font-size: 0.8rem; margin-top: 0.15rem; }
 [aria-invalid="true"] { border-color: var(--danger); }
 

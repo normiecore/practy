@@ -19,12 +19,20 @@ export function CommandsPage() {
           <p className="muted">Every capability in Practy. The same commands are available to the assistant, the REST API and MCP clients.</p>
         </div>
       </div>
-      <input style={{ maxWidth: 360, marginBottom: "1rem" }} placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search commands" />
+      <input
+        style={{ maxWidth: 360, marginBottom: "1rem" }}
+        placeholder="Search"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        aria-label="Search commands"
+        enterKeyHint="search"
+        onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+      />
       {!shown ? (
         <p className="muted">Loading…</p>
       ) : (
         <div className="table-wrap">
-          <table>
+          <table className="card-table">
             <thead>
               <tr>
                 <th>Command</th>
@@ -35,7 +43,7 @@ export function CommandsPage() {
             <tbody>
               {shown.map((c) => (
                 <tr key={c.name}>
-                  <td>
+                  <td data-label="Command" className="primary">
                     <button className="ghost" onClick={() => setOpen(c)}>
                       {c.title}
                     </button>
@@ -43,8 +51,12 @@ export function CommandsPage() {
                       <code>{c.name}</code>
                     </div>
                   </td>
-                  <td className="small">{c.description}</td>
-                  <td className="small">{TIER_LABEL[c.tier]}</td>
+                  <td data-label="What it does" className="small wide">
+                    {c.description}
+                  </td>
+                  <td data-label="Approval" className="small">
+                    {TIER_LABEL[c.tier]}
+                  </td>
                 </tr>
               ))}
             </tbody>

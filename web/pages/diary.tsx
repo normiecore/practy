@@ -44,7 +44,7 @@ export function Diary() {
         {() =>
           dates.data!.length ? (
             <div className="table-wrap">
-              <table>
+              <table className="card-table">
                 <thead>
                   <tr>
                     <th>Date</th>
@@ -56,15 +56,15 @@ export function Diary() {
                 <tbody>
                   {dates.data!.map((k) => (
                     <tr key={k.id} style={k.date && k.date < today ? { background: "var(--danger-soft)" } : undefined}>
-                      <td>{k.date ? date(k.date) : <Badge value="needs entry" tone="danger" />}</td>
-                      <td>
+                      <td data-label="Date">{k.date ? date(k.date) : <Badge value="needs entry" tone="danger" />}</td>
+                      <td data-label="Matter">
                         <a href={href("matters", k.matterId, "dates")}>{matter(k.matterId)?.number ?? "Matter"}</a>{" "}
                         <span className="small muted">{matter(k.matterId)?.title}</span>
                       </td>
-                      <td>
+                      <td data-label="Key date" className="primary">
                         {k.title} {k.kind === "critical" && <Badge value="critical" />}
                       </td>
-                      <td>
+                      <td data-label="Status">
                         <Badge value={k.status} />
                       </td>
                     </tr>
@@ -82,7 +82,7 @@ export function Diary() {
         {() =>
           tasks.data!.length ? (
             <div className="table-wrap">
-              <table>
+              <table className="card-table">
                 <thead>
                   <tr>
                     <th>Due</th>
@@ -94,10 +94,12 @@ export function Diary() {
                 <tbody>
                   {tasks.data!.map((t) => (
                     <tr key={t.id}>
-                      <td>{date(t.dueOn)}</td>
-                      <td>{t.title}</td>
-                      <td>{t.matterId ? <a href={href("matters", t.matterId, "tasks")}>{matter(t.matterId)?.number ?? "Matter"}</a> : "—"}</td>
-                      <td>
+                      <td data-label="Due">{date(t.dueOn)}</td>
+                      <td data-label="Task" className="primary">
+                        {t.title}
+                      </td>
+                      <td data-label="Matter">{t.matterId ? <a href={href("matters", t.matterId, "tasks")}>{matter(t.matterId)?.number ?? "Matter"}</a> : "—"}</td>
+                      <td data-label="Actions" className="actions">
                         <button className="secondary" onClick={() => void act("update_task", { taskId: t.id, status: "done" }, "Task completed")}>
                           Done
                         </button>

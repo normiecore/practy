@@ -64,7 +64,7 @@ export function Approvals() {
                     <div className="row" style={{ justifyContent: "space-between" }}>
                       <div>
                         <h3 style={{ margin: 0 }}>{commands[a.command]?.title ?? a.command}</h3>
-                        <div className="small muted">
+                        <div className="small muted approval-meta">
                           Requested by {who(a.requestedBy)} via {a.requestedVia} on {new Date(a.requestedAt).toLocaleString("en-AU")}
                           {a.matterIds.map((m) => (
                             <span key={m}>
