@@ -13,6 +13,7 @@ const HU: AuthorityInput = {
   medicalAccountsPaidByClient: true,
   clientPaidDisbursements: true,
   otherTerms: "resignation from employment with Ramsay Health Care.",
+  feesLabel: "Soul Legal fees",
 };
 
 describe("computeAuthority (port of fill_authority.py)", () => {

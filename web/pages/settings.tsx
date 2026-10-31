@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { ApiError } from "../api";
 import { CommandForm } from "../command-form";
-import { FormButton } from "./matter";
+import { FirmSettingsForm } from "./firm-settings-form";
+import { DedicatedFormButton, FormButton } from "./matter";
 import { href, Loading, useLoad, useToast, Value } from "../ui";
 import { currentSession } from "../api";
 
@@ -48,10 +49,19 @@ export function Settings({ tab = "firm" }: { tab?: string }) {
 }
 
 function Firm() {
-  const settings = useLoad<Record<string, unknown>>("get_settings", {});
+  const settings = useLoad<Record<string, any>>("get_settings", {});
   return (
     <div className="stack">
-      <FormButton label="Change settings" name="update_settings" />
+      <div className="row">
+        <DedicatedFormButton
+          label="Edit settings"
+          title="Firm settings"
+          wide
+          disabled={!settings.data}
+          name="update_settings"
+          render={(close) => <FirmSettingsForm current={settings.data!} onDone={close} />}
+        />
+      </div>
       <Loading state={settings}>{() => <Value value={settings.data} />}</Loading>
     </div>
   );

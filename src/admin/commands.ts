@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { User } from "../auth/model.js";
-import { conflict, notFound } from "../core/errors.js";
+import { conflict, invalid, notFound } from "../core/errors.js";
 import { defineCommand } from "../core/registry.js";
 import type { Role } from "../core/types.js";
 import type { Store } from "../domain/store.js";
-import { deepMerge, settingsFor, type TenantSettings } from "./settings.js";
+import { deepMerge, settingsFor, tenantSettingsSchema, type TenantSettings } from "./settings.js";
 
 const ROLES = ["principal", "solicitor", "paralegal", "accounts", "trust_authoriser"] as const satisfies readonly Role[];
 
@@ -19,6 +19,20 @@ export function findUserByEmail(store: Store, email: string): User | undefined {
 
 export function adminCommands(store: Store) {
   const settings = store.collection<TenantSettings>("tenant_settings");
+  /** The settings a patch would produce, refused with located issues if any value is the wrong shape. */
+  const mergedSettings = (tenantId: string, patch: Record<string, unknown>): TenantSettings => {
+    const { id: _i, tenantId: _t, updatedAt: _u, ...safe } = patch;
+    const next = { ...deepMerge(settingsFor(store, tenantId), safe), id: tenantId, tenantId };
+    const checked = tenantSettingsSchema.safeParse(next);
+    if (!checked.success) {
+      throw invalid(
+        z.prettifyError(checked.error),
+        // Paths are given as they sit inside `patch`, matching the command input.
+        checked.error.issues.map((i) => ({ path: ["patch", ...i.path.map(String)].join("."), message: i.message })),
+      );
+    }
+    return next;
+  };
   return [
     defineCommand({
       name: "whoami",
@@ -46,11 +60,9 @@ export function adminCommands(store: Store) {
       roles: ["principal"],
       approverRoles: ["principal"],
       input: z.object({ patch: z.record(z.string(), z.unknown()) }),
-      handler: ({ patch }, ctx) => {
-        const { id: _i, tenantId: _t, ...safe } = patch;
-        const next = deepMerge(settingsFor(store, ctx.actor.tenantId), safe);
-        return settings.set({ ...next, id: ctx.actor.tenantId, tenantId: ctx.actor.tenantId, updatedAt: new Date().toISOString() });
-      },
+      // Checked when requested, so a mistake is refused before it reaches the approver, and again when approved.
+      precheck: ({ patch }, ctx) => void mergedSettings(ctx.actor.tenantId, patch),
+      handler: ({ patch }, ctx) => settings.set({ ...mergedSettings(ctx.actor.tenantId, patch), updatedAt: new Date().toISOString() }),
     }),
 
     defineCommand({

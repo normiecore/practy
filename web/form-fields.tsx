@@ -2,7 +2,7 @@
  * Small controlled inputs for purpose-built forms: labelled text, date, money and number fields,
  * and an editable table of line items. Money is held as integer cents and typed in dollars.
  */
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import type { InputIssue } from "./api";
 import { NumberInput } from "./command-form";
 
@@ -90,6 +90,49 @@ export function SelectField({ label, hint, path, value, onChange, options, blank
           </option>
         ))}
       </select>
+      {hint && <span className="hint">{hint}</span>}
+      <FieldError path={path} />
+    </label>
+  );
+}
+
+export function CheckField({ label, hint, path, value, onChange }: FieldBase & { value: boolean | undefined; onChange: (v: boolean) => void }) {
+  return (
+    <label className="check">
+      <input type="checkbox" aria-invalid={useInvalid(path)} checked={!!value} onChange={(e) => onChange(e.target.checked)} />
+      <span>
+        {label}
+        {hint && <span className="hint"> {hint}</span>}
+        <FieldError path={path} />
+      </span>
+    </label>
+  );
+}
+
+/** A short list typed with commas, e.g. email domains or reminder months. */
+export function ListField({
+  label,
+  hint,
+  path,
+  value,
+  onChange,
+  numbers,
+  placeholder,
+}: FieldBase & { value: (string | number)[] | undefined; onChange: (v: (string | number)[]) => void; numbers?: boolean; placeholder?: string }) {
+  const [text, setText] = useState((value ?? []).join(", "));
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <input
+        aria-invalid={useInvalid(path)}
+        value={text}
+        placeholder={placeholder}
+        onChange={(e) => {
+          setText(e.target.value);
+          const items = e.target.value.split(",").map((x) => x.trim()).filter(Boolean);
+          onChange(numbers ? items.map(Number) : items);
+        }}
+      />
       {hint && <span className="hint">{hint}</span>}
       <FieldError path={path} />
     </label>

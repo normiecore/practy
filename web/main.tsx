@@ -68,7 +68,7 @@ function Shell({ session }: { session: Session }) {
   }
 
   return (
-    <div className="app" style={chatOpen ? undefined : { gridTemplateColumns: "220px 1fr" }}>
+    <div className="app">
       <nav className="nav" aria-label="Main">
         <div className="brand">Practy</div>
         <div className="firm">{session.firmName}</div>
@@ -83,8 +83,7 @@ function Shell({ session }: { session: Session }) {
           {chatOpen ? "Close assistant" : "Assistant"}
         </button>
         <div className="user">
-          {session.user.displayName}
-          <br />
+          <span className="who">{session.user.displayName}</span>
           <button className="ghost" style={{ padding: 0 }} onClick={() => void logout()}>
             Sign out
           </button>

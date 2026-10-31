@@ -67,7 +67,8 @@ export interface AuthorityResult {
 }
 
 export const DEFAULT_CENTRELINK = "to be ascertained";
-const DEFAULT_FEES_LABEL = "Soul Legal fees";
+/** Fallback only: compute_authority_to_settle supplies "<firm name> fees" from the tenant settings. */
+const DEFAULT_FEES_LABEL = "Firm fees";
 
 /** fill_authority.py amt(): "Nil" for zero unless told otherwise, "$" or "E$" prefix. */
 function amt(cents: Cents, estimated: boolean, nilIfZero = true): string {

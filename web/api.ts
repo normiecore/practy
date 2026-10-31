@@ -59,7 +59,7 @@ export async function command<T = any>(name: string, input: unknown = {}): Promi
   const res = await post(`/api/commands/${name}`, input);
   const data = await res.json().catch(() => ({}));
   if (res.status === 401) {
-    window.location.href = `/auth/login?returnTo=${encodeURIComponent(location.pathname + location.search)}`;
+    window.location.href = `/auth/login?returnTo=${encodeURIComponent(location.pathname + location.hash)}`;
     throw new ApiError("unauthorized", "Signed out", 401);
   }
   if (!res.ok) throw new ApiError(data.error ?? "error", data.message ?? `Request failed (${res.status})`, res.status, Array.isArray(data.issues) ? data.issues : []);
