@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { docxText as xmlText, getDocumentXml, openDocx } from "../src/docgen/docx.js";
 
 const docxText = (bytes: Uint8Array) => xmlText(getDocumentXml(openDocx(bytes)));
+import { settingsFor, type TenantSettings } from "../src/admin/settings.js";
 import { IntegrationHub } from "../src/integrations/hub.js";
 import { createApp } from "../src/server/app.js";
 import { makeDocx, p, r, syntheticAuthorityForm } from "./docgen/fixtures.js";
@@ -21,6 +22,9 @@ async function pdf(text: string): Promise<Uint8Array> {
 async function setup() {
   const store = new FakeDocumentStore();
   const app = createApp({ hub: new IntegrationHub().setDocuments(() => store) });
+  // The firm's name labels the fees row on its Authority to Settle form, as set at onboarding.
+  const settings = app.store.collection<TenantSettings>("tenant_settings");
+  settings.set({ ...settingsFor(app.store, TENANT), firmName: "Soul Legal" });
   const exec = async (name: string, input: unknown, actor: (typeof users)[keyof typeof users] = users.solicitor) => {
     const out = await app.bus.execute(name, input, as(actor));
     if (out.status !== "executed") throw new Error(`${name}: ${out.status}`);

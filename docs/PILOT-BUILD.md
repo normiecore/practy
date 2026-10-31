@@ -72,9 +72,10 @@ Firm templates (the Authority to Settle form and the letterhead) are **tenant as
 3. **Recurring aids:** should recurring aids use annual ÷ 52.14 × multiplier × 0.95 like future medical (currently they are lump sums)?
 4. **Centrelink preclusion:** does the period run from the injury date or from when weekly payments stopped? Are part weeks dropped?
 5. **Release of funds:** should a known but unpaid charge block release of funds, or can it be paid from trust at the same time as the distribution?
-6. **Firm-specific values:** the Authority B(j) label ("<Firm> fees") and the fee-earner categories come from tenant settings and the user list, not code.
+6. **Matter number format:** numbers must be letters, digits, `.`, `-` or `_` (no spaces, `/` or ` - `), so they can name Box folders exactly. Does any matter use another format, such as `2024/001`?
+7. **Firm-specific values:** the Authority B(j) label defaults to "<firm name> fees" from tenant settings (or is set per authority), and fee-earner categories come from the user list. The document naming convention is still a code profile (`SOUL_LEGAL_PROFILE` in `src/docgen/naming.ts`); a second firm would need its own profile chosen in settings.
 
-## Current state (30 Oct 2026, end of session)
+## Current state (31 Oct 2026)
 - **No open PRs.** Everything is merged into `main` (normiecore/practy#1 to #3).
 - **Security review done and fixed:** `docs/SECURITY-REVIEW.md` lists the 14 findings (3 high), all fixed with tests (merged in normiecore/practy#3), plus the behaviour changes and residual risks the firm should know about. The penetration test is still outstanding.
 - **Repo is public** (made public so Actions runs free; private runs were blocked by account billing). Keep client data, firm templates and credentials out of it.
@@ -85,6 +86,8 @@ Firm templates (the Authority to Settle form and the letterhead) are **tenant as
 - **How to add a capability:** write a `defineCommand` in the module's `commands.ts`, register it in `src/server/app.ts`, and add a test. It then appears automatically in REST, MCP and the assistant.
 - **Branches:** `pilot/connectors`, `pilot/docgen`, `pilot/damages-costs` and `research/strategy-and-compliance` are all merged into `main`.
 - **Browser tests:** `npm run test:e2e` (Playwright, `e2e/`) signs in, opens matters, confirms a key date through approvals, checks conflicts, damages, settlement and the dedicated forms, and visits every page; the CI `e2e` job runs it on every push.
+- **Phones:** the app shell, sign-out, field sizes (16px, so iOS does not zoom) and key-value lists now fit an iPhone, and an `iphone` Playwright project (`e2e/mobile.spec.ts`) checks that pages do not scroll sideways. Still to do for phones: tables as stacked cards (key dates, documents, matters, diary), a bottom tab bar, a section picker for matter tabs, and full-screen dialogs. Estimated 4 to 6 days. Shipping to iPhone (installable web app or a TestFlight shell) depends on this; see `docs/IPHONE.md`.
+- **Firm settings:** Settings → Firm → Edit settings is a sectioned form (firm, sign-in, privacy officer, letters, documents, email filing, calendar, key date policy, AI, trust). `update_settings` checks the merged result against `tenantSettingsSchema` before approval and again when approved, so a wrong type or misspelt key is refused with the field named.
 - **Forms and validation:** the damages form takes the firm's standing parameters from `get_damages_defaults` (blank means the firm default, so a later rule change is not frozen into saved versions). Invalid input comes back with an `issues` list of `{ path, message }`, which the dedicated forms show beside the field or table row concerned.
 - **Remaining before go-live:**
   - the web app (#14): review with the firm's staff;
