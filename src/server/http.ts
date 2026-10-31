@@ -36,8 +36,32 @@ const STATUS: Record<PractyError["code"], number> = { not_found: 404, forbidden:
 
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
+/**
+ * The tags that let a phone install Practy ("Add to Home Screen"). Signed-out staff land on the sign-in page,
+ * so it carries them too: installing from there installs Practy, not the sign-in address. Keep in step with web/index.html.
+ */
+export const INSTALL_HEAD = [
+  '<link rel="manifest" href="/manifest.webmanifest">',
+  '<link rel="icon" href="/favicon.ico" sizes="32x32">',
+  '<link rel="icon" href="/favicon.svg" type="image/svg+xml">',
+  '<link rel="apple-touch-icon" href="/apple-touch-icon.png">',
+  '<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">',
+  '<meta name="theme-color" content="#181c21" media="(prefers-color-scheme: dark)">',
+  '<meta name="apple-mobile-web-app-title" content="Practy">',
+  '<meta name="apple-mobile-web-app-status-bar-style" content="default">',
+].join("");
+
+/**
+ * Cache-Control for the files in web/public that installing needs. They are public because browsers fetch the
+ * manifest without cookies. The manifest is checked on every use so a change reaches installed apps; icons keep a day.
+ */
+const INSTALL_FILES: [RegExp, string][] = [
+  [/^\/manifest\.webmanifest$/, "no-cache"],
+  [/^\/(favicon\.(ico|svg)|apple-touch-icon\.png|icons\/[\w-]+\.png)$/, "public, max-age=86400"],
+];
+
 function page(title: string, body: string): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title>${INSTALL_HEAD}
 <style>body{font:16px/1.5 system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem;color:#1b1f24}h1{font-size:1.4rem}
 button,a.btn{display:inline-block;font:inherit;padding:.6rem 1rem;border-radius:.4rem;border:1px solid #1d4ed8;background:#1d4ed8;color:#fff;text-decoration:none;margin:.25rem .5rem .25rem 0;cursor:pointer}
 button.secondary{background:#fff;color:#1d4ed8}.muted{color:#57606a}input{font:inherit;padding:.5rem;width:100%;box-sizing:border-box;margin:.5rem 0}</style></head><body>${body}</body></html>`;
@@ -62,6 +86,11 @@ export function createHttpServer(app: App, opts: HttpOptions) {
   // Throttle sign-in, OAuth and API traffic per client address.
   http.use(["/auth", "/oauth", "/authorize", "/token", "/register", "/integrations"], rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: "draft-7", legacyHeaders: false }));
   http.use(["/api", "/mcp"], rateLimit({ windowMs: 60_000, limit: 600, standardHeaders: "draft-7", legacyHeaders: false }));
+  // Client data never rests in a browser's cache (phones get lost): API answers and documents are not stored.
+  http.use(["/api", "/mcp"], (_req, res, next) => {
+    res.setHeader("Cache-Control", "no-store");
+    next();
+  });
   http.use(express.json({ limit: "25mb" }));
   http.use(express.urlencoded({ extended: false }));
 
@@ -95,7 +124,9 @@ export function createHttpServer(app: App, opts: HttpOptions) {
 
   http.get("/auth/callback/:provider", async (req, res) => {
     try {
-      const { token, returnTo } = await auth.completeLogin(String(req.params.provider), String(req.query.state ?? ""), String(req.query.code ?? ""));
+      // Only a coarse device description and the network are kept from these (src/auth/sessions.ts).
+      const client = { userAgent: req.header("user-agent"), ip: req.ip };
+      const { token, returnTo } = await auth.completeLogin(String(req.params.provider), String(req.query.state ?? ""), String(req.query.code ?? ""), client);
       res.setHeader("Set-Cookie", cookie(token, (auth.opts.sessionHours ?? 12) * 3600));
       res.redirect(302, returnTo);
     } catch (err) {
@@ -118,7 +149,8 @@ export function createHttpServer(app: App, opts: HttpOptions) {
   });
 
   // ------------------------------------------------------------ API authentication
-  type Resolved = { actor: Actor; surface: Exclude<Surface, "mcp" | "agent"> };
+  /** sessionId is the cookie session's record id, so session commands can tell "this device" apart. */
+  type Resolved = { actor: Actor; surface: Exclude<Surface, "mcp" | "agent">; sessionId?: string };
   const resolve = (req: Request): Resolved | "csrf" | undefined => {
     const bearer = /^Bearer (.+)$/.exec(req.header("authorization") ?? "")?.[1];
     if (bearer) {
@@ -130,7 +162,7 @@ export function createHttpServer(app: App, opts: HttpOptions) {
     const s = auth.session(sessionCookieFrom(req.headers.cookie));
     if (!s) return undefined;
     if (req.method !== "GET" && req.header("x-practy-csrf") !== s.session.csrf) return "csrf";
-    return { actor: actorFor(s.user), surface: "ui" };
+    return { actor: actorFor(s.user), surface: "ui", sessionId: s.session.id };
   };
   const requireApi = (req: Request, res: Response): Resolved | undefined => {
     const r = resolve(req);
@@ -295,7 +327,7 @@ export function createHttpServer(app: App, opts: HttpOptions) {
       return;
     }
     res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Cache-Control", "no-store, no-transform");
     res.setHeader("X-Accel-Buffering", "no");
     res.flushHeaders();
     const abort = new AbortController();
@@ -315,6 +347,8 @@ export function createHttpServer(app: App, opts: HttpOptions) {
   http.use(mcpAuthRouter({ provider: oauth, issuerUrl: issuer, resourceServerUrl: mcpUrl, scopesSupported: ["practy"], resourceName: "Practy" }));
 
   http.get("/oauth/consent", (req, res) => {
+    // Shows the signed-in person's name and email and carries a CSRF token: never cache it.
+    res.setHeader("Cache-Control", "no-store");
     const id = String(req.query.request ?? "");
     const pending = oauth.pendingRequest(id);
     if (!pending) {
@@ -395,7 +429,17 @@ ${allowed ? "" : `<p><strong>${escapeHtml(pending.redirectHost)} is not on your 
 
   // ------------------------------------------------------------ web app
   if (opts.webDir && existsSync(join(opts.webDir, "index.html"))) {
-    http.use(express.static(opts.webDir, { index: false, maxAge: "1h" }));
+    // Before the sign-in check below: the script bundle, and the manifest and icons for installing, are public.
+    http.use(
+      express.static(opts.webDir, {
+        index: false,
+        maxAge: "1h",
+        setHeaders: (res) => {
+          const policy = INSTALL_FILES.find(([path]) => path.test(res.req.path))?.[1];
+          if (policy) res.setHeader("Cache-Control", policy);
+        },
+      }),
+    );
     http.get(/^\/(?!api\/|auth\/|oauth\/|mcp|\.well-known\/).*/, (req: Request, res: Response, next: NextFunction) => {
       if (!auth.session(sessionCookieFrom(req.headers.cookie))) {
         res.redirect(302, `/auth/login?returnTo=${encodeURIComponent(req.originalUrl)}`);

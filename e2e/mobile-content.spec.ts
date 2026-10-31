@@ -138,7 +138,7 @@ test("no tab or list page scrolls sideways with real content in it", async ({ pa
   await page.goto(`/#/matters/${matter.id}/damages`);
   const net = page.getByRole("row").filter({ hasText: /^Net\$/ });
   await acrossScreen(net.locator(".num"), "Net amount", false);
-  for (const path of ["/#/", "/#/diary", "/#/commands", "/#/settings/users"]) {
+  for (const path of ["/#/", "/#/diary", "/#/commands", "/#/settings/users", "/#/settings/sessions"]) {
     await page.goto(path);
     await expect(page.locator(".main h1").first()).toBeVisible();
     await expect(page.getByRole("main").getByText("Loading…")).toHaveCount(0);
@@ -160,4 +160,19 @@ test("forms bring up the email and phone keyboards", async ({ page }) => {
   await expect(phone).toHaveAttribute("type", "tel");
   await expect(phone).toHaveAttribute("autocomplete", "tel");
   await expect(client.getByRole("textbox", { name: /^Name/ })).toHaveAttribute("enterkeyhint", "go");
+});
+
+test("sign-in sessions open from the Section picker as cards, with this device marked and no End button on it", async ({ page }) => {
+  await page.goto("/#/settings/firm");
+  const picker = page.getByRole("combobox", { name: "Section" });
+  await acrossScreen(picker, "Section picker");
+  await picker.selectOption({ label: "Sign-in sessions" });
+  await expect(page).toHaveURL(/#\/settings\/sessions$/);
+  const mine = page.getByRole("main").getByRole("row").filter({ hasText: "This device" });
+  await expect(mine).toHaveCount(1);
+  await expect(mine.getByRole("button")).toHaveCount(0);
+  await expect(mine.locator('td[data-label="Location"]')).toBeVisible();
+  await expect(mainTableHeads(page)).toBeHidden();
+  await acrossScreen(page.getByRole("button", { name: "Sign out all other devices" }), "Sign out all other devices");
+  await fitsScreen(page, "sign-in sessions");
 });

@@ -15,6 +15,7 @@ Users ──HTTPS──▶ ALB (ACM cert, WAF) ──▶ ECS Fargate: practy con
 
 - Run **one task** for the pilot. The background jobs (email sweep and calendar sync) assume a single scheduler. To scale out, run one job instance with `PRACTY_JOBS=1` and set `PRACTY_JOBS=0` on the others.
 - `/healthz` is the health check for both the load balancer and the container.
+- Staff can install Practy on their phones from the HTTPS address (`docs/IPHONE.md`). Phones fetch `/manifest.webmanifest`, `/favicon.ico`, `/favicon.svg`, `/apple-touch-icon.png` and `/icons/*` without cookies, so do not put them behind an extra sign-in at the load balancer. `/api` answers are sent with `Cache-Control: no-store`: do not add a cache in front of `/api`.
 
 ## Build
 

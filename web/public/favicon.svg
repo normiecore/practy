@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>Practy</title>
+  <!-- The Practy mark: a white P on the app's accent blue (accent in web/styles.css). Generic, never a firm's branding.
+       Every icon is made from this file: after changing it, run `node scripts/make-icons.mjs` and commit the PNGs. -->
+  <rect id="tile" width="512" height="512" rx="112" fill="#1d4ed8"/>
+  <path fill="#ffffff" fill-rule="evenodd" d="M160 112H264A88 88 0 0 1 264 288H220V400H160ZM220 164V236H264A36 36 0 0 0 264 164Z"/>
+</svg>

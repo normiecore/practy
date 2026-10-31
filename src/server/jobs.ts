@@ -1,11 +1,13 @@
 import { usersOf } from "../admin/commands.js";
 import { settingsFor } from "../admin/settings.js";
 import { actorFor } from "../auth/service.js";
+import { forgetExpiredSessionDetails } from "../auth/sessions.js";
 import type { App } from "./app.js";
 
 /**
  * Background work, run as each user on the "job" surface so it is audited like
- * anything else: the email sweep every 15 minutes, and a daily calendar sync.
+ * anything else: the email sweep every 15 minutes, and a daily calendar sync. Hourly, expired
+ * sign-in sessions lose their device and network details.
  * A single deployment per firm runs one scheduler; failures are logged, not fatal.
  */
 export function startJobs(app: App, opts: { sweepMinutes?: number; calendarHourLocal?: number } = {}): () => void {
@@ -36,5 +38,7 @@ export function startJobs(app: App, opts: { sweepMinutes?: number; calendarHourL
       }
     }, 5 * 60_000),
   );
+  // Sessions that ran out on their own keep no device or network once expired (ended ones are cleared at once).
+  timers.push(setInterval(() => forgetExpiredSessionDetails(app.store), 60 * 60_000));
   return () => timers.forEach(clearInterval);
 }

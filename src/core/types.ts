@@ -38,4 +38,9 @@ export interface InvocationContext {
   surface: Surface;
   /** Set when executing a command whose approval has been granted. */
   approvalId?: string;
+  /**
+   * The sign-in session behind a request from the web app (its internal record id), so session
+   * commands can mark and keep "this device". Set only by the HTTP layer; never returned to anyone.
+   */
+  sessionId?: string;
 }

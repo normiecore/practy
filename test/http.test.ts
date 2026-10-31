@@ -31,14 +31,23 @@ async function start() {
 
 const get = (url: string, cookie?: string) => fetch(url, { redirect: "manual", headers: cookie ? { cookie } : {} });
 
-async function signIn(base: string, email: string): Promise<string> {
+async function signIn(base: string, email: string, headers: Record<string, string> = {}): Promise<string> {
   const login = await get(`${base}/auth/login/dev?returnTo=/matters`);
   const devUrl = new URL(login.headers.get("location")!, base);
   const state = devUrl.searchParams.get("state")!;
-  const cb = await get(`${base}/auth/callback/dev?state=${state}&code=${encodeURIComponent(email)}`);
+  const cb = await fetch(`${base}/auth/callback/dev?state=${state}&code=${encodeURIComponent(email)}`, { redirect: "manual", headers });
   expect(cb.status).toBe(302);
   expect(cb.headers.get("location")).toBe("/matters");
   return cb.headers.get("set-cookie")!.split(";")[0]!;
+}
+
+/** Runs a command as the web app does with this session cookie. */
+async function commandAs(base: string, cookie: string, name: string, input: unknown = {}) {
+  const session = await get(`${base}/api/session`, cookie);
+  if (session.status !== 200) return { status: session.status, body: undefined as any };
+  const { csrf } = await session.json();
+  const res = await fetch(`${base}/api/commands/${name}`, { method: "POST", headers: { cookie, "Content-Type": "application/json", "x-practy-csrf": csrf }, body: JSON.stringify(input) });
+  return { status: res.status, body: await res.json() };
 }
 
 describe("REST with dev tokens", () => {
@@ -97,6 +106,50 @@ describe("staff sign-in", () => {
     const cb = await get(`${base}/auth/callback/dev?state=${state}&code=${encodeURIComponent("u-sol@soullegal.com.au")}`);
     expect(cb.status).toBe(302);
     expect(cb.headers.get("location")).toBe("/");
+  });
+});
+
+describe("sign-in sessions over HTTP", () => {
+  const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+  const WINDOWS_CHROME = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+  const sha = (s: string) => createHash("sha256").update(s).digest("hex");
+
+  it("records the device and network at sign-in, and an ended session is refused on its next request", async () => {
+    const { base } = await start();
+    const phone = await signIn(base, "u-sol@soullegal.com.au", { "user-agent": IPHONE, "x-forwarded-for": "203.0.113.45" });
+    const desk = await signIn(base, "u-sol@soullegal.com.au", { "user-agent": WINDOWS_CHROME });
+    const phoneCsrf = (await (await get(`${base}/api/session`, phone)).json()).csrf;
+
+    const list = await commandAs(base, desk, "list_my_sessions");
+    expect(list.status).toBe(200);
+    const sessions = list.body.result as { id: string; device: string; location: string; current: boolean }[];
+    expect(sessions.map((s) => [s.device, s.current]).sort()).toEqual([["Chrome on Windows", true], ["Safari on iPhone", false]]);
+    expect(sessions.find((s) => !s.current)!.location).toBe("203.0.113.0/24");
+    const text = JSON.stringify(list.body);
+    for (const cookie of [phone, desk]) {
+      const raw = cookie.split("=")[1]!;
+      expect(text).not.toContain(raw);
+      expect(text).not.toContain(sha(raw));
+    }
+
+    const ended = await commandAs(base, desk, "end_session", { sessionId: sessions.find((s) => !s.current)!.id });
+    expect(ended.body.result).toMatchObject({ ended: 1, device: "Safari on iPhone" });
+    // The phone is signed out on its next request, whatever it asks for.
+    expect((await get(`${base}/api/session`, phone)).status).toBe(401);
+    const write = await fetch(`${base}/api/commands/whoami`, { method: "POST", headers: { cookie: phone, "Content-Type": "application/json", "x-practy-csrf": phoneCsrf }, body: "{}" });
+    expect(write.status).toBe(401);
+    expect((await commandAs(base, desk, "whoami")).status).toBe(200);
+  });
+
+  it("signs out all other devices but keeps the session that asked", async () => {
+    const { base } = await start();
+    const desk = await signIn(base, "u-sol@soullegal.com.au", { "user-agent": WINDOWS_CHROME });
+    const others = [await signIn(base, "u-sol@soullegal.com.au", { "user-agent": IPHONE }), await signIn(base, "u-sol@soullegal.com.au")];
+    const colleague = await signIn(base, "u-kw@soullegal.com.au");
+    expect((await commandAs(base, desk, "end_other_sessions")).body.result).toEqual({ ended: 2 });
+    for (const o of others) expect((await get(`${base}/api/session`, o)).status).toBe(401);
+    expect((await get(`${base}/api/session`, desk)).status).toBe(200);
+    expect((await get(`${base}/api/session`, colleague)).status).toBe(200);
   });
 });
 
@@ -165,7 +218,9 @@ describe("MCP OAuth for external AI clients", () => {
     const challenge = createHash("sha256").update("v").digest("base64url");
     const a = await get(`${base}/authorize?response_type=code&client_id=${reg.client_id}&redirect_uri=${encodeURIComponent("https://attacker.example/cb")}&code_challenge=${challenge}&code_challenge_method=S256`);
     const cookie = await signIn(base, "u-sol@soullegal.com.au");
-    const page = await (await get(`${base}${a.headers.get("location")!}`, cookie)).text();
+    const consent = await get(`${base}${a.headers.get("location")!}`, cookie);
+    expect(consent.headers.get("cache-control")).toBe("no-store");
+    const page = await consent.text();
     expect(page).toContain("<strong>attacker.example</strong>");
     expect(page).toContain(reg.client_id);
     expect(page).toContain("Unverified client");

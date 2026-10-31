@@ -17,6 +17,8 @@ Order matters: each step relies on the one before it. Allow about two working da
    - privacy officer;
    - letter profile: sender, title, sign-off (the firm sign-off text, font, size and colours from the letterhead house style).
 3. **Settings → Users:** add each staff member with their roles and fee-earner category (SP / JP / C/PL, per the bill of costs categories).
+   - When someone leaves, make them inactive (Add or change a user, Active off). Once approved, that signs them out everywhere, disconnects any AI clients they connected and revokes their API keys.
+   - For a lost phone, Sign out everywhere on that person's row does the same without deactivating them. It does not sign the phone out of Google or Microsoft, so whoever holds it could sign straight back in: also sign them out at the identity provider (Google Workspace Admin: the user, then Sign-in cookies, Reset; Microsoft Entra: the user, then Revoke sessions) or reset their password.
 4. **Settings → Integrations:**
    - Box credentials, plus the matters root folder id (the PracticePanther root). Practy links a matter only to a folder directly inside this root whose name starts with the matter number and " - ";
    - connect Xero;
@@ -56,7 +58,9 @@ Order matters: each step relies on the one before it. Allow about two working da
 - Matter workspace tabs. Chronology review (verify every event, using the page and the quote).
 - Damages, then particulars. Settlement, then Authority to Settle.
 - The Approvals inbox: what needs approval and why.
+- Lost or shared device: **Settings → Sign-in sessions** shows where you are signed in. End the lost phone's session, or use Sign out all other devices. If you cannot get to a computer, ask a principal to sign you out everywhere. For a lost or stolen phone, also tell the principal straight away: the firm must sign you out of Google or Microsoft too, or the phone can sign back in.
 - The assistant: ask it for anything you would ask a paralegal. It drafts; you approve.
+- Phones: add Practy to the Home Screen and sign in inside it (`docs/IPHONE.md`, "How staff install it").
 
 ## Success measures (from the strategy)
 Collect a baseline (sample timesheets) before go-live, then measure weekly:

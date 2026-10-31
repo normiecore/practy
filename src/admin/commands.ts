@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { User } from "../auth/model.js";
+import { revokeUserAccess } from "../auth/sessions.js";
 import { conflict, invalid, notFound } from "../core/errors.js";
 import { defineCommand } from "../core/registry.js";
 import type { Role } from "../core/types.js";
@@ -77,7 +78,8 @@ export function adminCommands(store: Store) {
     defineCommand({
       name: "upsert_user",
       title: "Add or update a user",
-      description: "Create or update a staff account (email, roles, fee-earner category, active). Requires principal approval.",
+      description:
+        "Create or update a staff account (email, roles, fee-earner category, active). Deactivating a user also ends their sign-in sessions, disconnects their AI clients and revokes their API keys. Requires principal approval.",
       tier: 2,
       roles: ["principal"],
       approverRoles: ["principal"],
@@ -92,7 +94,7 @@ export function adminCommands(store: Store) {
         const email = input.email.toLowerCase();
         const existing = findUserByEmail(store, email);
         if (existing && existing.tenantId !== ctx.actor.tenantId) throw conflict("Email belongs to another firm");
-        return usersOf(store).set({
+        const user = usersOf(store).set({
           id: existing?.id ?? randomUUID(),
           tenantId: ctx.actor.tenantId,
           createdAt: existing?.createdAt ?? new Date().toISOString(),
@@ -100,6 +102,9 @@ export function adminCommands(store: Store) {
           ...input,
           email,
         });
+        // An inactive user cannot authenticate anyway; ending everything now means reactivating them later revives nothing.
+        if (!user.active) revokeUserAccess(store, user.tenantId, user.id, "deactivated");
+        return user;
       },
     }),
 
