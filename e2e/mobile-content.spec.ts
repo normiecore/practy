@@ -3,7 +3,8 @@ import type { Locator, Page } from "@playwright/test";
 import { clientName, createMatter, expect, fitsScreen, matterNumber, runCommand, test } from "./fixtures";
 
 const TABS = ["overview", "dates", "tasks", "notes", "evidence", "documents", "chronology", "damages", "settlement", "time", "trust", "actions"];
-const LONG_NAME = "2025-04-02 Letter from the treating orthopaedic surgeon to the insurer about the treatment plan, prognosis and work capacity of the plaintiff.pdf";
+// Long enough to wrap past three lines at 390px, so the clamp has to cut it.
+const LONG_NAME = "2025-04-02 Letter from the treating orthopaedic surgeon to the insurer about the treatment plan, prognosis and work capacity of the plaintiff following the second surgery and the independent medical examination.pdf";
 
 // The same plaintiff as e2e/damages.spec.ts.
 const DAMAGES = {
@@ -76,8 +77,14 @@ test("documents are cards with their actions on screen and long names cut to thr
   const link = card.getByRole("link");
   await expect(link).toHaveAttribute("title", LONG_NAME);
   await acrossScreen(link, "Document link");
-  const lines = await link.evaluate((el) => el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight));
-  expect(lines, "document name is clamped").toBeLessThan(4.5);
+  const clamp = await link.evaluate((el) => {
+    const style = getComputedStyle(el);
+    return { cut: el.scrollHeight > el.clientHeight, lines: el.clientHeight / parseFloat(style.lineHeight), padding: parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) };
+  });
+  expect(clamp.cut, "the long name is actually cut").toBe(true);
+  // No padding inside the clip, or part of a fourth line shows beneath the third.
+  expect(clamp.padding).toBe(0);
+  expect(clamp.lines).toBeLessThanOrEqual(3.05);
   await fitsScreen(page, "documents");
 });
 

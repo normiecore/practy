@@ -175,8 +175,27 @@ export function useDialogFocus<T extends HTMLElement>(onClose: () => void) {
 }
 
 /** A dialog. On a phone it fills the screen, with the title bar fixed and a closing row of actions kept in view. */
+/** Scrolls the first error message in a dialog into view, so a failed submit is never silent. */
+function revealProblem(body: HTMLElement | null) {
+  body?.querySelector(PROBLEM)?.scrollIntoView({ block: "center" });
+}
+const PROBLEM = '[role="alert"], .notice.danger, [aria-invalid="true"]';
+
 export function Modal({ title, onClose, wide, children }: { title: string; onClose: () => void; wide?: boolean; children: ReactNode }) {
   const ref = useDialogFocus<HTMLDivElement>(onClose);
+  const body = useRef<HTMLDivElement>(null);
+  // The submit button stays in view at the bottom of long forms, so a message that appears further up
+  // (missing fields, or the server's objection after a round trip) would otherwise go unseen.
+  useEffect(() => {
+    const el = body.current;
+    if (!el) return;
+    const seen = new MutationObserver((changes) => {
+      const added = changes.some((c) => [...c.addedNodes].some((n) => n instanceof Element && (n.matches(PROBLEM) || !!n.querySelector(PROBLEM))));
+      if (added) revealProblem(el);
+    });
+    seen.observe(el, { childList: true, subtree: true });
+    return () => seen.disconnect();
+  }, []);
   return (
     <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div ref={ref} tabIndex={-1} className={wide ? "modal wide" : "modal"} role="dialog" aria-modal="true" aria-label={title}>
@@ -186,7 +205,14 @@ export function Modal({ title, onClose, wide, children }: { title: string; onClo
             ✕
           </button>
         </div>
-        <div className="modal-body">{children}</div>
+        <div
+          className="modal-body"
+          ref={body}
+          // A repeated failure re-renders the same message without adding it, so look again after each submit.
+          onSubmitCapture={() => requestAnimationFrame(() => requestAnimationFrame(() => revealProblem(body.current)))}
+        >
+          {children}
+        </div>
       </div>
     </div>
   );

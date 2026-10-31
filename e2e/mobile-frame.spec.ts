@@ -78,6 +78,10 @@ test("More opens a sheet with the other sections, the assistant and sign-out", a
   await expect(sheet).toBeHidden();
   const chat = page.getByRole("complementary", { name: "Assistant" });
   await expect(chat).toBeVisible();
+  // Focus moves into the assistant, not back to the More tab it now covers.
+  expect(await chat.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+  const closeChat = (await chat.getByRole("button", { name: "Close assistant" }).boundingBox())!;
+  expect(Math.min(closeChat.width, closeChat.height)).toBeGreaterThanOrEqual(44);
   const screen = page.viewportSize()!;
   const box = (await chat.boundingBox())!;
   expect([Math.round(box.width), Math.round(box.height)]).toEqual([screen.width, screen.height]);
@@ -112,6 +116,28 @@ test("a long dialog fills the screen and keeps its submit button in view", async
   expect(Math.min(size.width, size.height)).toBeGreaterThanOrEqual(44);
   await close.click();
   await expect(dialog).toBeHidden();
+});
+
+test("a failed submit brings its message into view above the sticky button", async ({ page, request }) => {
+  const matter = await createMatter(request, { number: matterNumber("MFE"), title: "Frame errors v ICWA", client: clientName(), injuryDate: "2025-03-14" });
+  await page.goto(`/#/matters/${matter.id}/damages`);
+  await page.getByRole("button", { name: "Compute damages" }).click();
+  const dialog = page.getByRole("dialog", { name: "Particulars of damages" });
+  // Tapped straight away: sex, date of birth and earnings are missing.
+  await dialog.getByRole("button", { name: "Compute damages" }).click();
+  await expect(dialog.getByRole("alert").filter({ hasText: "Still needed" })).toBeInViewport();
+  // A second failed tap, from the top of the form, finds it again.
+  await dialog.locator(".modal-body").evaluate((el) => el.scrollTo(0, 0));
+  await dialog.getByRole("button", { name: "Compute damages" }).click();
+  await expect(dialog.getByRole("alert").filter({ hasText: "Still needed" })).toBeInViewport();
+});
+
+test("each tab opens at the top of its page", async ({ page }) => {
+  await page.goto("/#/commands");
+  await page.locator(".main").evaluate((el) => el.scrollTo(0, el.scrollHeight));
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Approvals" }).click();
+  await expect(page).toHaveURL(/#\/approvals/);
+  expect(await page.locator(".main").evaluate((el) => el.scrollTop)).toBe(0);
 });
 
 test("Today shows its four counts two to a row", async ({ page }) => {

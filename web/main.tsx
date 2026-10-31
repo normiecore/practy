@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { loadSession, logout, type Session } from "./api";
 import { Chat } from "./pages/chat";
@@ -114,6 +114,11 @@ function Shell({ session }: { session: Session }) {
   const matterId = section === "matters" ? route[1] : undefined;
   const routeKey = route.join("/");
   useEffect(() => setMoreOpen(false), [routeKey]);
+  // Each page starts at the top: .main is one long-lived scroll container shared by every page.
+  const mainRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0 });
+  }, [routeKey]);
   const pendingCount = pending.data?.length ?? 0;
   const inMore = MORE.some((n) => n.path === section);
   const closeMore = useCallback(() => setMoreOpen(false), []);
@@ -178,7 +183,9 @@ function Shell({ session }: { session: Session }) {
         <span className="brand">Practy</span>
         <span className="where">{NAV.find((n) => n.path === section)?.label}</span>
       </header>
-      <main className="main">{page}</main>
+      <main className="main" ref={mainRef}>
+        {page}
+      </main>
       <nav className="tabbar" aria-label="Main">
         {TABS.map((n) => (
           <a key={n.path} href={href(...(n.path ? [n.path] : []))} className={section === n.path ? "active" : undefined} aria-current={section === n.path ? "page" : undefined}>
