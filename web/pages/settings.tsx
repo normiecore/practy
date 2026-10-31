@@ -3,7 +3,7 @@ import { ApiError } from "../api";
 import { CommandForm } from "../command-form";
 import { FirmSettingsForm } from "./firm-settings-form";
 import { DedicatedFormButton, FormButton, SectionTabs } from "./matter";
-import { href, Loading, useLoad, useToast, Value } from "../ui";
+import { Badge, href, Loading, useAct, useLoad, useToast, Value } from "../ui";
 import { currentSession } from "../api";
 
 const TABS: [string, string][] = [
@@ -13,7 +13,12 @@ const TABS: [string, string][] = [
   ["templates", "Templates"],
   ["import", "Import matters"],
   ["api", "API keys"],
+  ["sessions", "Sign-in sessions"],
 ];
+
+/** Local date and time, such as "31 Oct 2026, 5:20 pm". */
+const when = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" }) : "Never");
+const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 const CONNECT: [string, string][] = [
   ["google", "Google (Gmail and Calendar)"],
@@ -38,6 +43,7 @@ export function Settings({ tab = "firm" }: { tab?: string }) {
       {tab === "templates" && <Templates />}
       {tab === "import" && <Import />}
       {tab === "api" && <ApiKeys />}
+      {tab === "sessions" && <Sessions />}
     </>
   );
 }
@@ -61,9 +67,44 @@ function Firm() {
   );
 }
 
+interface StaffUser {
+  id: string;
+  email: string;
+  displayName: string;
+  roles: string[];
+  feeEarnerCategory?: string;
+  active: boolean;
+  lastLoginAt?: string;
+}
+
+interface AccessRevoked {
+  displayName: string;
+  sessionsEnded: number;
+  aiClientsDisconnected: number;
+  apiKeysRevoked: number;
+}
+
+function revokedMessage(r: AccessRevoked): string {
+  const parts = [
+    r.sessionsEnded && `${count(r.sessionsEnded, "session")} ended`,
+    r.aiClientsDisconnected && `${count(r.aiClientsDisconnected, "AI client")} disconnected`,
+    r.apiKeysRevoked && `${count(r.apiKeysRevoked, "API key")} revoked`,
+  ].filter(Boolean);
+  return parts.length ? `Signed ${r.displayName} out everywhere: ${parts.join(", ")}` : `${r.displayName} was not signed in anywhere`;
+}
+
 function Users() {
   const [inactive, setInactive] = useState(false);
-  const users = useLoad("list_users", { includeInactive: inactive });
+  const users = useLoad<StaffUser[]>("list_users", { includeInactive: inactive });
+  const me = currentSession()?.user;
+  // Only a principal can sign someone else out; the server checks this too.
+  const principal = !!me?.roles.includes("principal");
+  const act = useAct();
+  const toast = useToast();
+  const signOutEverywhere = async (u: StaffUser) => {
+    const out = await act<AccessRevoked>("end_user_sessions", { userId: u.id });
+    if (out?.status === "executed") toast(revokedMessage(out.result));
+  };
   return (
     <div className="stack">
       <div className="row">
@@ -72,7 +113,136 @@ function Users() {
           <input type="checkbox" checked={inactive} onChange={(e) => setInactive(e.target.checked)} /> Show inactive
         </label>
       </div>
-      <Loading state={users}>{() => <Value value={users.data} />}</Loading>
+      {principal && (
+        <p className="muted small">
+          Sign out everywhere ends all of that person's sign-in sessions, disconnects AI clients they connected and revokes their API keys: use it for a lost phone or when
+          someone leaves. They can sign in again unless you also make them inactive (which signs them out everywhere too).
+        </p>
+      )}
+      <Loading state={users}>
+        {() =>
+          users.data!.length ? (
+            <div className="table-wrap">
+              <table className="card-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Roles</th>
+                    <th>Fee earner</th>
+                    <th>Active</th>
+                    <th>Last sign-in</th>
+                    {principal && <th />}
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.data!.map((u) => (
+                    <tr key={u.id}>
+                      <td data-label="Name" className="primary">
+                        {u.displayName}
+                      </td>
+                      <td data-label="Email">{u.email}</td>
+                      <td data-label="Roles">{u.roles.map((r) => r.replace(/_/g, " ")).join(", ")}</td>
+                      <td data-label="Fee earner">{u.feeEarnerCategory ?? <span className="muted">None</span>}</td>
+                      <td data-label="Active">{u.active ? "Yes" : <Badge value="inactive" tone="warn" />}</td>
+                      <td data-label="Last sign-in">{when(u.lastLoginAt)}</td>
+                      {principal && (
+                        <td data-label="Actions" className="actions">
+                          {u.id !== me?.id && (
+                            <button className="secondary" aria-label={`Sign out everywhere (${u.displayName})`} onClick={() => void signOutEverywhere(u)}>
+                              Sign out everywhere
+                            </button>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="empty">No users.</div>
+          )
+        }
+      </Loading>
+    </div>
+  );
+}
+
+interface SignInSession {
+  id: string;
+  device: string;
+  location: string | null;
+  createdAt: string;
+  lastSeenAt: string;
+  expiresAt: string;
+  current: boolean;
+}
+
+/** The signed-in person's own sessions, so a lost phone or a shared computer can be cut off. */
+function Sessions() {
+  const sessions = useLoad<SignInSession[]>("list_my_sessions", {});
+  const act = useAct();
+  const toast = useToast();
+  const others = sessions.data?.filter((s) => !s.current).length ?? 0;
+  const endOthers = async () => {
+    const out = await act<{ ended: number }>("end_other_sessions", {});
+    if (out?.status === "executed") toast(out.result.ended ? `Signed out ${count(out.result.ended, "other device")}` : "No other devices were signed in");
+  };
+  return (
+    <div className="stack">
+      <p className="muted small">
+        Each browser or phone you sign in on has its own session. If a device is lost, or you signed in on a shared computer, end its session here: it is signed out the
+        next time it does anything. Locations are approximate: the network the device signed in from, with the last part of the address removed.
+      </p>
+      <div className="row">
+        <button className="secondary" disabled={!others} onClick={() => void endOthers()}>
+          Sign out all other devices
+        </button>
+      </div>
+      <Loading state={sessions}>
+        {() =>
+          sessions.data!.length ? (
+            <div className="table-wrap">
+              <table className="card-table">
+                <thead>
+                  <tr>
+                    <th>Device</th>
+                    <th>Approximate location</th>
+                    <th>Signed in</th>
+                    <th>Last active</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {sessions.data!.map((s) => (
+                    <tr key={s.id}>
+                      <td data-label="Device" className="primary">
+                        {s.device} {s.current && <Badge value="This device" tone="info" />}
+                      </td>
+                      <td data-label="Location">{s.location ?? <span className="muted">Unknown</span>}</td>
+                      <td data-label="Signed in">{when(s.createdAt)}</td>
+                      <td data-label="Last active">{when(s.lastSeenAt)}</td>
+                      <td data-label="Actions" className="actions">
+                        {s.current ? (
+                          // Ending this device's session is the normal Sign out, never a tap in this list.
+                          <span className="hint">To end this one, use Sign out.</span>
+                        ) : (
+                          <button className="secondary" aria-label={`End session on ${s.device}`} onClick={() => void act("end_session", { sessionId: s.id }, "Session ended")}>
+                            End
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="empty">No active sessions.</div>
+          )
+        }
+      </Loading>
     </div>
   );
 }

@@ -124,7 +124,9 @@ export function createHttpServer(app: App, opts: HttpOptions) {
 
   http.get("/auth/callback/:provider", async (req, res) => {
     try {
-      const { token, returnTo } = await auth.completeLogin(String(req.params.provider), String(req.query.state ?? ""), String(req.query.code ?? ""));
+      // Only a coarse device description and the network are kept from these (src/auth/sessions.ts).
+      const client = { userAgent: req.header("user-agent"), ip: req.ip };
+      const { token, returnTo } = await auth.completeLogin(String(req.params.provider), String(req.query.state ?? ""), String(req.query.code ?? ""), client);
       res.setHeader("Set-Cookie", cookie(token, (auth.opts.sessionHours ?? 12) * 3600));
       res.redirect(302, returnTo);
     } catch (err) {
@@ -147,7 +149,8 @@ export function createHttpServer(app: App, opts: HttpOptions) {
   });
 
   // ------------------------------------------------------------ API authentication
-  type Resolved = { actor: Actor; surface: Exclude<Surface, "mcp" | "agent"> };
+  /** sessionId is the cookie session's record id, so session commands can tell "this device" apart. */
+  type Resolved = { actor: Actor; surface: Exclude<Surface, "mcp" | "agent">; sessionId?: string };
   const resolve = (req: Request): Resolved | "csrf" | undefined => {
     const bearer = /^Bearer (.+)$/.exec(req.header("authorization") ?? "")?.[1];
     if (bearer) {
@@ -159,7 +162,7 @@ export function createHttpServer(app: App, opts: HttpOptions) {
     const s = auth.session(sessionCookieFrom(req.headers.cookie));
     if (!s) return undefined;
     if (req.method !== "GET" && req.header("x-practy-csrf") !== s.session.csrf) return "csrf";
-    return { actor: actorFor(s.user), surface: "ui" };
+    return { actor: actorFor(s.user), surface: "ui", sessionId: s.session.id };
   };
   const requireApi = (req: Request, res: Response): Resolved | undefined => {
     const r = resolve(req);

@@ -39,6 +39,7 @@ Each fix has a test that fails without it. A second reviewer re-ran the original
 - **External MCP clients** can only receive a code at loopback or at a host in `ai.externalClientRedirectHosts` (default `claude.ai`, `claude.com`). A principal changes the list through `update_settings` (practitioner approval). Native clients with custom URL schemes cannot register.
 - **Key date confirmation** approvals record the date under review. If the date changes before approval, the approval fails and confirmation must be requested again.
 - **AML status, the retention report and privacy requests** show only matters the caller can see. AI surfaces see only matters with AI consent.
+- **Sign-in sessions** (31 Oct): anyone can end their own sessions on other devices from Settings → Sign-in sessions, and a principal can sign another user out everywhere from Settings → Users. Signing a user out everywhere, or deactivating them, also revokes the access and refresh tokens of AI clients they connected and their API keys, so reactivating someone revives none of them. These commands cannot be called from the assistant or an external AI client.
 
 ## Known residual risks (accepted for the pilot, revisit before wider release)
 - A party added by the assistant (`add_party` from an AI surface) becomes an allowed `send_email` recipient. Sending still needs practitioner approval, and the approval card shows the recipients.
@@ -46,4 +47,10 @@ Each fix has a test that fails without it. A second reviewer re-ran the original
 - Matters created before this fix with a look-alike number are not migrated. Check existing matter numbers at onboarding.
 - Error messages returned to the assistant are not scanned for matter references. Errors for hidden matters are generic "not found", so this is low risk.
 - AI exclusions follow copies by content hash (and by email message and file name). A copy whose bytes differ, such as a re-rendered or edited PDF, is not linked to the excluded original.
+- The earlier gap of no way to sign out a lost device is closed (sign-in sessions above). What remains:
+  - an ended session stops working on its next request, but a page already open on that device keeps showing what it last loaded until then;
+  - sessions still last a fixed 12 hours with no idle timeout;
+  - the device description comes from the browser's User-Agent, which the browser controls, so it identifies a device for its owner but proves nothing;
+  - the location is only the network (IPv4 /24, IPv6 /48), and behind a proxy it is only as good as the proxy's forwarded address;
+  - ended and expired session records, with their device description and network, are kept until a retention sweep is added.
 - The independent penetration test is still required before go-live.

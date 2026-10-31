@@ -1,14 +1,21 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { findUserByEmail, usersOf } from "../admin/commands.js";
 import { settingsFor } from "../admin/settings.js";
 import type { Actor } from "../core/types.js";
 import type { Store } from "../domain/store.js";
 import type { ApiKey, Session, User } from "./model.js";
 import type { OidcProvider } from "./oidc.js";
+import { API_KEY_KIND, describeDevice, endSession as endStoredSession, LAST_SEEN_EVERY_MS, SESSION_KIND, truncateIp } from "./sessions.js";
 
 export const SESSION_COOKIE = "practy_session";
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 const token = (prefix: string) => `${prefix}_${randomBytes(32).toString("base64url")}`;
+
+/** What the server knows about the browser signing in. Only a coarse summary of each is stored. */
+export interface SignInClient {
+  userAgent?: string;
+  ip?: string;
+}
 
 interface PendingLogin {
   providerId: string;
@@ -47,8 +54,8 @@ export class AuthService {
     readonly providers: Map<string, OidcProvider>,
     readonly opts: { baseUrl: string; sessionHours?: number; defaultTenantId?: string },
   ) {
-    this.sessions = store.collection<Session>("session");
-    this.apiKeys = store.collection<ApiKey>("api_key");
+    this.sessions = store.collection<Session>(SESSION_KIND);
+    this.apiKeys = store.collection<ApiKey>(API_KEY_KIND);
   }
 
   callbackUrl(providerId: string): string {
@@ -70,7 +77,7 @@ export class AuthService {
   }
 
   /** Completes an IdP callback; returns a session token and where to send the browser. */
-  async completeLogin(providerId: string, state: string, code: string): Promise<{ token: string; returnTo: string; user: User }> {
+  async completeLogin(providerId: string, state: string, code: string, client: SignInClient = {}): Promise<{ token: string; returnTo: string; user: User }> {
     const p = this.pending.get(state);
     this.pending.delete(state);
     if (!p || p.providerId !== providerId || p.expiresAt < Date.now()) throw new Error("Login request expired or invalid");
@@ -86,36 +93,47 @@ export class AuthService {
       if (settings.identity.requireMfaClaim && !claims.amr?.includes("mfa")) throw new Error("Multi-factor authentication is required");
     }
     usersOf(this.store).set({ ...user, lastLoginAt: new Date().toISOString() });
-    return { token: this.createSession(user, providerId), returnTo: p.returnTo, user };
+    return { token: this.createSession(user, providerId, client), returnTo: p.returnTo, user };
   }
 
-  createSession(user: User, idp: string): string {
+  /** Starts a session, recording only a coarse device description and the client's network (see src/auth/sessions.ts). */
+  createSession(user: User, idp: string, client: SignInClient = {}): string {
     const raw = token("ps");
     const now = Date.now();
+    const createdAt = new Date(now).toISOString();
     this.sessions.set({
       id: hash(raw),
       tenantId: user.tenantId,
       userId: user.id,
       csrf: randomBytes(24).toString("base64url"),
-      createdAt: new Date(now).toISOString(),
+      createdAt,
       expiresAt: new Date(now + (this.opts.sessionHours ?? 12) * 3_600_000).toISOString(),
       idp,
+      ref: randomUUID(),
+      device: describeDevice(client.userAgent),
+      network: truncateIp(client.ip),
+      lastSeenAt: createdAt,
     });
     return raw;
   }
 
   session(raw: string | undefined): { session: Session; user: User } | undefined {
     if (!raw) return undefined;
-    const s = this.sessions.get(hash(raw));
-    if (!s || s.expiresAt < new Date().toISOString()) return undefined;
+    let s = this.sessions.get(hash(raw));
+    const now = new Date();
+    if (!s || s.expiresAt < now.toISOString()) return undefined;
     const user = usersOf(this.store).get(s.userId);
     if (!user?.active) return undefined;
+    // Record use, but at most every few minutes rather than on every request.
+    if (!s.lastSeenAt || now.getTime() - Date.parse(s.lastSeenAt) >= LAST_SEEN_EVERY_MS) {
+      s = this.sessions.set({ ...s, lastSeenAt: now.toISOString() });
+    }
     return { session: s, user };
   }
 
   endSession(raw: string | undefined): void {
     const found = raw && this.sessions.get(hash(raw));
-    if (found) this.sessions.set({ ...found, expiresAt: new Date(0).toISOString() });
+    if (found) endStoredSession(this.store, found, "signed_out");
   }
 
   createApiKey(user: User, label: string): string {
