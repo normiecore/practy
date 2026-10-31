@@ -190,6 +190,10 @@ Key choices and why:
 | D7 | **Design-partner terms: Option C.** Milestone-vested equity in Practy for Soul Legal, founding-customer pricing, IP licence or assignment of generic workflows, and a DPA. See [DESIGN-PARTNER](DESIGN-PARTNER.md) | 30 Oct 2026 | Soul Legal accepted the recommendation |
 | D8 | **Trust source:** support **both** setups: trust kept in Xero itself (Xero Accounting API, read-only), or in a trust add-on (cashbook export, with a per-vendor API adapter later). Both feed the same shadow ledger | 30 Oct 2026 | Soul Legal |
 | D9 | **Ownership:** Practy is owned by a **separate founding team**, not by Soul Legal's principals. Soul Legal is an arm's-length design partner and customer | 30 Oct 2026 | Soul Legal |
+| D10 | **Ethical walls cover document folders.** A matter links only to its own Box folder, directly under the matters root and named with its number; matter numbers are letters, digits, `.`, `-` or `_` so folder matching is exact. See [SECURITY-REVIEW](SECURITY-REVIEW.md) | 30 Oct 2026 | Security review; number format to be confirmed by Soul Legal |
+| D11 | **External AI clients (MCP):** off by default. When on, sign-in codes go only to loopback or to hosts on the firm's list (default `claude.ai`, `claude.com`), and removing a host disconnects clients using it. Both a closed and an open set-up are possible by editing the list | 31 Oct 2026 | Security review |
+| D12 | **AI exclusions follow content:** excluding a document also excludes every document with the same content across the firm, whenever it was filed or indexed | 30 Oct 2026 | Security review |
+| D13 | **Firm settings are a legal-risk change:** every change needs principal approval and is checked against the settings schema before it reaches the approvals inbox | 31 Oct 2026 | Practy team |
 
 ### Still open
 - Pilot fee earners and a baseline timesheet sample.
