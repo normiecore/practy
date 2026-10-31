@@ -63,6 +63,17 @@ export async function runCommand<T = any>(request: APIRequestContext, name: stri
   return body.result as T;
 }
 
+/** On a phone: the page itself never scrolls sideways and the content uses the full screen width. */
+export async function fitsScreen(page: Page, where: string) {
+  const m = await page.evaluate(() => ({
+    scroll: document.documentElement.scrollWidth,
+    viewport: window.innerWidth,
+    main: document.querySelector(".main")?.getBoundingClientRect().width ?? 0,
+  }));
+  expect(m.scroll, `${where} scrolls sideways`).toBeLessThanOrEqual(m.viewport);
+  expect(m.main, `${where} content is squeezed`).toBeGreaterThanOrEqual(m.viewport - 1);
+}
+
 /** Opens a matter through the API, for tests about later screens. */
 export async function createMatter(request: APIRequestContext, m: NewMatter): Promise<{ id: string }> {
   const out = await runCommand<{ matter: { id: string } }>(request, "create_matter", {

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { FormButton } from "./matter";
+import { FormButton, SectionTabs } from "./matter";
 import { href, Loading, useLoad, Value } from "../ui";
 
 const TABS: [string, string][] = [
@@ -20,13 +20,7 @@ export function Compliance({ tab = "privacy" }: { tab?: string }) {
           <p className="muted">Privacy Act requests and breaches, automated decision register, AML/CTF screening, retention and the AI use log.</p>
         </div>
       </div>
-      <div className="tabs" role="tablist">
-        {TABS.map(([k, label]) => (
-          <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "active" : undefined} onClick={() => (location.hash = href("compliance", k))}>
-            {label}
-          </button>
-        ))}
-      </div>
+      <SectionTabs tabs={TABS} current={tab} onSelect={(k) => (location.hash = href("compliance", k))} />
       {tab === "privacy" && (
         <Panel list="list_privacy_requests" input={{ openOnly: false }} intro="Access and correction requests under APPs 12 and 13. Respond within 30 days.">
           <FormButton label="Log request" name="log_privacy_request" />

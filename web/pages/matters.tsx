@@ -29,9 +29,17 @@ export function Matters() {
         </div>
         <button onClick={() => setOpening(true)}>Open a matter</button>
       </div>
-      <div className="row" style={{ marginBottom: "1rem" }}>
-        <input style={{ maxWidth: 360 }} placeholder="Search" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search matters" />
-        <select style={{ maxWidth: 220 }} value={scheme} onChange={(e) => setScheme(e.target.value)} aria-label="Scheme">
+      <div className="row filters" style={{ marginBottom: "1rem" }}>
+        <input
+          className="filter-search"
+          placeholder="Search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Search matters"
+          enterKeyHint="search"
+          onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+        />
+        <select className="filter-scheme" value={scheme} onChange={(e) => setScheme(e.target.value)} aria-label="Scheme">
           <option value="">All schemes</option>
           {Object.entries(SCHEME_LABEL).map(([k, v]) => (
             <option key={k} value={k}>
@@ -44,7 +52,7 @@ export function Matters() {
         {() =>
           matters.data!.length ? (
             <div className="table-wrap">
-              <table>
+              <table className="card-table matters-table">
                 <thead>
                   <tr>
                     <th>No.</th>
@@ -57,15 +65,21 @@ export function Matters() {
                 <tbody>
                   {matters.data!.map((m) => (
                     <tr key={m.id}>
-                      <td>
+                      <td data-label="No." className="matter-no">
                         <a href={href("matters", m.id)}>{m.number}</a>
                       </td>
-                      <td>
-                        <a href={href("matters", m.id)}>{m.title}</a>
+                      <td data-label="Title" className="primary">
+                        {/* On a phone the number cell is hidden and this one link carries number and title. */}
+                        <a href={href("matters", m.id)} className="matter-link">
+                          <span className="card-only">{m.number} </span>
+                          {m.title}
+                        </a>
                       </td>
-                      <td>{SCHEME_LABEL[m.scheme] ?? m.scheme}</td>
-                      <td>{date(m.injuryDate)}</td>
-                      <td>
+                      <td data-label="Scheme" className="scheme">
+                        <span>{SCHEME_LABEL[m.scheme] ?? m.scheme}</span>
+                      </td>
+                      <td data-label="Injury date">{date(m.injuryDate)}</td>
+                      <td data-label="Status" className="status">
                         <Badge value={m.status} />
                       </td>
                     </tr>

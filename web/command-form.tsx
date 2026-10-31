@@ -263,12 +263,17 @@ function Field({ name, schema: raw, value, required, onChange, patch }: FieldPro
     );
   }
 
-  const type = s.format === "date" ? "date" : s.format === "date-time" ? "datetime-local" : s.format === "email" ? "email" : "text";
+  // Email and phone fields get the matching phone keyboard and autofill. Return in a single-line
+  // field submits the form, so the phone keyboard labels that key "go".
+  const tel = name === "phone" || /Phone$/.test(name);
+  const type = s.format === "date" ? "date" : s.format === "date-time" ? "datetime-local" : s.format === "email" ? "email" : tel ? "tel" : "text";
   return (
     <label className="field">
       <span>{title}</span>
       <input
         type={type}
+        autoComplete={type === "email" ? "email" : type === "tel" ? "tel" : undefined}
+        enterKeyHint={type === "date" || type === "datetime-local" ? undefined : "go"}
         value={type === "datetime-local" && value ? String(value).slice(0, 16) : (value ?? "")}
         onChange={(e) => onChange(type === "datetime-local" && e.target.value ? new Date(e.target.value).toISOString() : e.target.value)}
       />
