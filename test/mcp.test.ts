@@ -16,13 +16,15 @@ async function connect(app: ReturnType<typeof setup>["app"], actor: Actor) {
 const text = (r: any) => r.content[0].text as string;
 
 describe("MCP server", () => {
-  it("exposes every command except human-only approval decisions (UI/API/MCP parity)", async () => {
+  it("exposes every command except human-only approval decisions and sign-in sessions (UI/API/MCP parity)", async () => {
     const { app } = setup();
     const client = await connect(app, users.solicitor);
     const tools = (await client.listTools()).tools;
     const expected = app.bus.registry.all().filter((d) => !d.humanOnly).map((d) => d.name).sort();
     expect(tools.map((t) => t.name).sort()).toEqual(expected);
-    expect(app.bus.registry.all().filter((d) => d.humanOnly).map((d) => d.name)).toEqual(["decide_approval"]);
+    expect(app.bus.registry.all().filter((d) => d.humanOnly).map((d) => d.name).sort()).toEqual(
+      ["decide_approval", "end_other_sessions", "end_session", "end_user_sessions", "list_my_sessions"],
+    );
 
     const pay = tools.find((t) => t.name === "prepare_trust_payment")!;
     expect(pay.annotations).toMatchObject({ destructiveHint: true, readOnlyHint: false });

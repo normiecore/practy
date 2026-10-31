@@ -6,6 +6,7 @@ import type { Persistence } from "../core/persistence.js";
 import { Registry } from "../core/registry.js";
 import { SecretStore, type SecretRecord } from "../core/secrets.js";
 import { adminCommands } from "../admin/commands.js";
+import { sessionCommands } from "../auth/commands.js";
 import { settingsFor } from "../admin/settings.js";
 import { AgentService, agentCommands } from "../ai/agent.js";
 import { ChronologyService, chronologyCommands } from "../ai/chronology.js";
@@ -88,6 +89,7 @@ export function createApp(opts: AppOptions = {}): App {
   const chronology = new ChronologyService(store, chatModel, loadBytes);
   const registry = new Registry().register(
     ...adminCommands(store),
+    ...sessionCommands(store),
     ...domainCommands(store, undefined, (tenantId) => hub.documents(tenantId)),
     ...trustCommands(store, trust),
     ...chronologyCommands(chronology),

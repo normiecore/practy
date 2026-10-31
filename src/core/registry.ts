@@ -15,8 +15,9 @@ export interface CommandDef<I extends z.ZodObject = z.ZodObject, O = unknown> {
    */
   approverRoles?: Role[];
   /**
-   * Deliberately unavailable on AI surfaces (approval decisions). This is the only
-   * exception to UI/API/MCP parity and is asserted in tests.
+   * Deliberately unavailable on AI surfaces: approval decisions, and reading or ending sign-in
+   * sessions (a prompt-injected assistant must not sign people out or read their devices).
+   * These are the only exceptions to UI/API/MCP parity and are asserted in tests.
    */
   humanOnly?: boolean;
   /** Matters touched by this input; used for walls, no-AI flags and the AI-use log. */

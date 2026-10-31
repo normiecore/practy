@@ -54,4 +54,5 @@ Phone layout work, needed by every route: tables as stacked cards (key dates, do
 ## Privacy
 
 - **Phones get lost.** Do not let a service worker cache `/api` responses or documents.
-- **Signing out a lost device:** there is no "sign out this device" feature yet. Add one before staff use personal phones for client matters (APP 11).
+- **Signing out a lost device:** from any other device, Settings → Sign-in sessions lists where you are signed in (browser and platform, approximate network, when it signed in and was last used) and ends a session with End, or all but the one you are using with Sign out all other devices. The lost phone is signed out on its next request. If the owner cannot do it, a principal can use Sign out everywhere on Settings → Users, which also disconnects that person's AI clients and revokes their API keys. Deactivating someone does the same.
+- **What a session records (APP 11):** only a coarse device description such as "Safari on iPhone" (not the full User-Agent) and the network the session signed in from, with the last part of the address removed (IPv4 /24, IPv6 /48). That is enough for someone to tell their office or mobile carrier from a place they have never been, without pinpointing a household or device. Ended and expired session records are not yet purged; add a retention sweep before wider release.

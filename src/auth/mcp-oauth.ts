@@ -8,6 +8,7 @@ import type { OAuthClientInformationFull, OAuthTokens } from "@modelcontextproto
 import { settingsFor } from "../admin/settings.js";
 import type { Store } from "../domain/store.js";
 import { parseCookies, SESSION_COOKIE, type AuthService } from "./service.js";
+import { OAUTH_TOKEN_KIND } from "./sessions.js";
 
 /**
  * OAuth 2.1 authorization server for MCP clients (Claude Desktop, claude.ai, Claude Code).
@@ -101,7 +102,7 @@ export class PractyOAuthProvider implements OAuthServerProvider {
   ) {
     this.clients = store.collection<StoredClient>("oauth_client");
     this.codes = store.collection<IssuedCode>("oauth_code");
-    this.tokens = store.collection<IssuedToken>("oauth_token");
+    this.tokens = store.collection<IssuedToken>(OAUTH_TOKEN_KIND);
   }
 
   get clientsStore(): OAuthRegisteredClientsStore {
